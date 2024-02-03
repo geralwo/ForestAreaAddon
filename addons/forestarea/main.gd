@@ -37,7 +37,8 @@ func _generate():
 	print("::: generating Forest")
 	_aabb = AABB(self.position,_size)
 	var result_positions = []
-	ForestData.boundary = _aabb
+	ForestData.location = self.position
+	ForestData.dimensions = _size
 	# Clear existing trees
 	for m in _temp_meshes:
 		if m:

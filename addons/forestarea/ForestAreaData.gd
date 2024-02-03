@@ -1,25 +1,33 @@
 @tool
 class_name ForestAreaData extends Resource
 
-@export var boundary: AABB
-@export var items: Dictionary = {}
-@export var children: Array = []
+@export var aabb : AABB
+@export var dimensions : Vector3 :
+	set(v):
+		dimensions = v
+		if v:
+			aabb = AABB(location,dimensions)
+@export var location : Vector3
+@export var items : Dictionary = {}
+@export var children : Array = []
 var max_items: int = 16
 
-func _init(_boundary = null) -> void:
-	if _boundary and _boundary is AABB:
-		self.boundary = _boundary
+func _init(_location, _dimensions = null) -> void:
+	location = _location
+	if dimensions:
+		dimensions = _dimensions
+		aabb = AABB(location,dimensions)
 
 
 func size() -> int:
-		var size = 1 # Counting the current node
+		var count = 1 # Counting the current node
 		for child in children:
-			size += child.size()
-		return size
+			count += child.size()
+		return count
 
 func insert(item_position: Vector3, data: Dictionary) -> bool:
 	# dont insert if item position is not inside aabb
-	if not boundary.has_point(item_position):
+	if not aabb.has_point(item_position):
 		return false
 	# insert into node if items size is smaller than max items and this node has no children
 	if items.size() < max_items and children.size() == 0:
@@ -36,12 +44,12 @@ func insert(item_position: Vector3, data: Dictionary) -> bool:
 	return false
 
 func subdivide() -> void:
-	var child_half_dim = boundary.size / 2
+	var child_half_dim = aabb.size / 2
 
 	for i in range(8):
 		var offset = Vector3((i & 1) * child_half_dim.x, ((i >> 1) & 1) * child_half_dim.y, ((i >> 2) & 1) * child_half_dim.z)
-		var child_position = boundary.position + offset
-		children.append(ForestAreaData.new(AABB(child_position, child_half_dim)))
+		var child_position = aabb.position + offset
+		children.append(ForestAreaData.new(child_position, child_half_dim))
 
 func query(radius: float, position: Vector3) -> Dictionary:
 #	prints("Querying Node with Boundary:", boundary)
@@ -62,17 +70,17 @@ func query(radius: float, position: Vector3) -> Dictionary:
 	return items_within_radius
 
 func is_in_bounds(aabb : AABB) -> bool:
-	if not boundary.encloses(aabb):
+	if not aabb.encloses(aabb):
 		return false
 	return true
 
 func intersects_sphere(center: Vector3, radius: float) -> bool:
 	var squared_distance = 0.0
-	var extents = boundary.position + boundary.size
+	var extents = aabb.position + aabb.size
 
 	for i in range(3):
-		if center[i] < boundary.position[i]:
-			squared_distance += pow(center[i] - boundary.position[i], 2)
+		if center[i] < aabb.position[i]:
+			squared_distance += pow(center[i] - aabb.position[i], 2)
 		elif center[i] > extents[i]:
 			squared_distance += pow(center[i] - extents[i], 2)
 
@@ -88,8 +96,8 @@ func save_to_file(path: String) -> void:
 
 static func load_from_file(path: String) -> ForestAreaData:
 	var octree_resource = load(path) as ForestAreaData
-	var new_octree = ForestAreaData.new()
-	new_octree.boundary = octree_resource.boundary
+	var new_octree = ForestAreaData.new(octree_resource.location)
+	new_octree.dimensions = octree_resource.dimensions
 	new_octree.items = octree_resource.items
 	new_octree.children = octree_resource.children
 	return new_octree
@@ -99,7 +107,7 @@ func visualize_node(proxy_node : Node):
 	var node = MeshInstance3D.new()
 	# Create sphere with low detail of size.
 	var box_mesh = BoxMesh.new()
-	box_mesh.size = boundary.size
+	box_mesh.size = aabb.size
 	var material = StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.albedo_color = Color(randf(),randf(),randf(),0.1)
@@ -111,7 +119,7 @@ func visualize_node(proxy_node : Node):
 	node.mesh = box_mesh
 	node.add_to_group("octree_debug_visuals")
 	proxy_node.add_child(node)
-	node.position = boundary.get_center()
+	node.position = aabb.get_center()
 	for child in children:
 		child.visualize_node(proxy_node)
 
