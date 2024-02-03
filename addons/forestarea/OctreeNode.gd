@@ -1,3 +1,4 @@
+@tool
 class_name OctreeNode extends Resource
 
 @export var boundary: AABB
@@ -62,7 +63,6 @@ func query(radius: float, position: Vector3) -> Dictionary:
 
 func is_in_bounds(aabb : AABB) -> bool:
 	if not boundary.encloses(aabb):
-		print("outside of range")
 		return false
 	return true
 
@@ -83,7 +83,8 @@ func save_to_file(path: String) -> void:
 	if success == OK:
 		print("saving data to file ",path)
 	else:
-		prints("failed saving file",path,success)
+		prints("failed saving file",path)
+		prints("error code:",success)
 
 static func load_from_file(path: String) -> OctreeNode:
 	var octree_resource = load(path) as OctreeNode

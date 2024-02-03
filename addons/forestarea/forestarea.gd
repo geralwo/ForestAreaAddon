@@ -10,13 +10,14 @@ func _enter_tree():
 		preload("res://icon.svg")
 	)
 	add_custom_type(
-		"OctreeNode",
+		"ForestAreaData",
 		"Resource",
-		preload("res://addons/forestarea/octree_node.gd"),
+		preload("res://addons/forestarea/OctreeNode.gd"),
 		preload("res://icon.svg")
 	)
 
 
 func _exit_tree():
 	# Clean-up of the plugin goes here.
-	remove_custom_type("GridPlacer")
+	remove_custom_type("ForestArea")
+	remove_custom_type("ForestAreaData")

@@ -5,3 +5,5 @@ addons/plugin_refresher/
 *.tscn
 *.import
 *.godot
+*.tres
+*.res

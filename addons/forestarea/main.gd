@@ -13,10 +13,6 @@ class_name ForestArea
 		if _show_aabb_preview:
 			_update_preview()
 @export var trees_meshlib : MeshLibrary
-var OctreeData : OctreeNode
-var _temp_meshes : Array[MeshInstance3D]
-var _tree_meshes : Array[MeshInstance3D]
-var _aabb : AABB
 @export var _show_aabb_preview : bool = false :
 	set(v):
 		_show_aabb_preview = v
@@ -24,10 +20,12 @@ var _aabb : AABB
 			_update_preview()
 		else:
 			remove_child(_preview_mesh)
-
+@export var OctreeData : OctreeNode
+var _temp_meshes : Array[MeshInstance3D]
+var _tree_meshes : Array[MeshInstance3D]
+var _aabb : AABB
 var _view_query_data : bool = false
 var _preview_mesh : MeshInstance3D
-
 func _update_preview():
 	if _preview_mesh:
 		remove_child(_preview_mesh)
@@ -37,10 +35,12 @@ func _update_preview():
 
 
 func _generate():
+	if not OctreeData:
+		printerr("no data file")
+		return
 	_aabb = AABB(self.position,_size)
 	print(_aabb)
 	var result_positions = []
-	OctreeData = OctreeNode.new()
 	OctreeData.boundary = _aabb
 	# Clear existing trees
 	for m in _temp_meshes:
@@ -91,7 +91,6 @@ func _generate():
 			"id": meshlib_id,
 			"scale": _scale,
 		}
-		OctreeData.is_in_bounds(_aabb)
 		OctreeData.insert(pos, data)
 	if _view_query_data:
 		for m in _temp_meshes:
@@ -100,7 +99,6 @@ func _generate():
 	for m in _tree_meshes:
 		add_child(m)
 		m.owner = self
-	OctreeData.save_to_file("res://forest_01.items")
 func random_point_in_aabb(aabb: AABB) -> Vector3:
 	var random_point = Vector3(
 			randi_range(-(_aabb.size.x / 2),(_aabb.size.x / 2)),
@@ -146,5 +144,4 @@ func draw_debug_box(location: Vector3, size: Vector3, col: Color = Color.RED) ->
 	box.surface_set_material(0, material)
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.mesh = box
-	#node.position = location
 	return node
