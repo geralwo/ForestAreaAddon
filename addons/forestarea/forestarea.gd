@@ -7,13 +7,13 @@ func _enter_tree():
 		"ForestArea",
 		"Node3D",
 		preload("res://addons/forestarea/main.gd"),
-		preload("res://icon.svg")
+		preload("res://addons/forestarea/forestarea_icon.svg")
 	)
 	add_custom_type(
 		"ForestAreaData",
 		"Resource",
-		preload("res://addons/forestarea/OctreeNode.gd"),
-		preload("res://icon.svg")
+		preload("res://addons/forestarea/ForestAreaData.gd"),
+		preload("res://addons/forestarea/forestarea_icon.svg")
 	)
 
 

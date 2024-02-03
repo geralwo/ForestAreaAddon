@@ -1,5 +1,5 @@
 @tool
-class_name OctreeNode extends Resource
+class_name ForestAreaData extends Resource
 
 @export var boundary: AABB
 @export var items: Dictionary = {}
@@ -41,7 +41,7 @@ func subdivide() -> void:
 	for i in range(8):
 		var offset = Vector3((i & 1) * child_half_dim.x, ((i >> 1) & 1) * child_half_dim.y, ((i >> 2) & 1) * child_half_dim.z)
 		var child_position = boundary.position + offset
-		children.append(OctreeNode.new(AABB(child_position, child_half_dim)))
+		children.append(ForestAreaData.new(AABB(child_position, child_half_dim)))
 
 func query(radius: float, position: Vector3) -> Dictionary:
 #	prints("Querying Node with Boundary:", boundary)
@@ -86,9 +86,9 @@ func save_to_file(path: String) -> void:
 		prints("failed saving file",path)
 		prints("error code:",success)
 
-static func load_from_file(path: String) -> OctreeNode:
-	var octree_resource = load(path) as OctreeNode
-	var new_octree = OctreeNode.new()
+static func load_from_file(path: String) -> ForestAreaData:
+	var octree_resource = load(path) as ForestAreaData
+	var new_octree = ForestAreaData.new()
 	new_octree.boundary = octree_resource.boundary
 	new_octree.items = octree_resource.items
 	new_octree.children = octree_resource.children
