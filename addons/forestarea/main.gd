@@ -1,0 +1,150 @@
+@tool
+extends Node3D
+class_name ForestArea
+@export var generate : bool = false :
+	set(_v):
+		_generate()
+		if _show_aabb_preview:
+			_update_preview()
+@export var tree_count : int = 7
+@export var _size : Vector3 = Vector3(100,100,100):
+	set(v):
+		_size = v
+		if _show_aabb_preview:
+			_update_preview()
+@export var trees_meshlib : MeshLibrary
+var OctreeData : OctreeNode
+var _temp_meshes : Array[MeshInstance3D]
+var _tree_meshes : Array[MeshInstance3D]
+var _aabb : AABB
+@export var _show_aabb_preview : bool = false :
+	set(v):
+		_show_aabb_preview = v
+		if v:
+			_update_preview()
+		else:
+			remove_child(_preview_mesh)
+
+var _view_query_data : bool = false
+var _preview_mesh : MeshInstance3D
+
+func _update_preview():
+	if _preview_mesh:
+		remove_child(_preview_mesh)
+	_preview_mesh = draw_debug_box(self.position,_size,Color(Color.RED,0.2))
+	add_child(_preview_mesh)
+	#_preview_mesh.owner = self
+
+
+func _generate():
+	_aabb = AABB(self.position,_size)
+	print(_aabb)
+	var result_positions = []
+	OctreeData = OctreeNode.new()
+	OctreeData.boundary = _aabb
+	# Clear existing trees
+	for m in _temp_meshes:
+		if m:
+			m.queue_free()
+	for m in _tree_meshes:
+		if m:
+			m.queue_free()
+	_temp_meshes.clear()
+	_tree_meshes.clear()
+
+	_aabb = AABB(self.position,_size)
+	var space_state = get_world_3d().direct_space_state
+	for i in range(tree_count):
+		var random_position = random_point_in_aabb(_aabb)
+		var query_start = to_global(random_position)
+		var query_end = to_global(random_position + Vector3(0,-_aabb.size.y,0))
+		var hit_s = draw_debug_box(query_start,Vector3.ONE * 5,Color(Color.HOT_PINK,0.15))
+		var hit_e = draw_debug_box(query_end,Vector3.ONE * 5,Color(Color.LIME_GREEN,0.15))
+		hit_s.position = to_local(query_start)
+		hit_e.position = to_local(query_end)
+		_temp_meshes.append(hit_s)
+		_temp_meshes.append(hit_e)
+
+		var query = PhysicsRayQueryParameters3D.create(query_start,query_end) # global coords
+		#prints("creating query with",query_start,query_end)
+		var result = space_state.intersect_ray(query) # global coords
+		if result:
+			#prints("got hit at",result.position)
+			var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.YELLOW,0.95))
+			result_positions.append(result.position)
+			hit.position = to_local(result.position)
+			_temp_meshes.append(hit)
+
+
+	for pos in result_positions:
+		var tree_scale = randf_range(1,3)
+		var _scale = Vector3(tree_scale,tree_scale,tree_scale)
+		var meshlib_id = randi() % trees_meshlib.get_item_list().size()
+		var mesh = trees_meshlib.get_item_mesh(meshlib_id)
+		var generation_instance = MeshInstance3D.new()
+		generation_instance.mesh = mesh
+		generation_instance.scale = _scale
+		generation_instance.position = to_local(pos)
+		_tree_meshes.append(generation_instance)
+		var data = {
+			"meshlib": trees_meshlib,
+			"id": meshlib_id,
+			"scale": _scale,
+		}
+		OctreeData.is_in_bounds(_aabb)
+		OctreeData.insert(pos, data)
+	if _view_query_data:
+		for m in _temp_meshes:
+			add_child(m)
+			m.owner = self
+	for m in _tree_meshes:
+		add_child(m)
+		m.owner = self
+	OctreeData.save_to_file("res://forest_01.items")
+func random_point_in_aabb(aabb: AABB) -> Vector3:
+	var random_point = Vector3(
+			randi_range(-(_aabb.size.x / 2),(_aabb.size.x / 2)),
+			_aabb.size.y / 2,  # Keep Y coordinate constant at max y
+			randi_range(-(_aabb.size.z / 2),(_aabb.size.z / 2))
+		)
+	return random_point
+
+func draw_debug_sphere(location: Vector3, size: float = 1.0, col: Color = Color.RED,  radial_segments : int = 8, is_hemisphere : bool = false) -> MeshInstance3D:
+	var node = MeshInstance3D.new()
+	# Create sphere with low detail of size.
+	var sphere = SphereMesh.new()
+	sphere.is_hemisphere = is_hemisphere
+	sphere.radial_segments = radial_segments
+	sphere.rings = radial_segments / 2
+	sphere.radius = size
+	if is_hemisphere:
+		node.rotate_x(deg_to_rad(180))
+		sphere.height = size
+	else:
+		sphere.height = size * 2
+	# Bright red material (unshaded).
+	var material = StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = col
+	material.flags_unshaded = true
+	sphere.surface_set_material(0, material)
+	# Add to meshinstance in the right place.
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.mesh = sphere
+	if false:
+		node.rotation.y = randf()
+	return node
+
+func draw_debug_box(location: Vector3, size: Vector3, col: Color = Color.RED) -> MeshInstance3D:
+	var node = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = size
+	var material = StandardMaterial3D.new()
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = col
+	material.flags_unshaded = true
+	box.surface_set_material(0, material)
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.mesh = box
+	#node.position = location
+	return node
