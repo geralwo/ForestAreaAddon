@@ -4,10 +4,7 @@ class_name ForestArea
 
 @export var generate : bool = false :
 	set(_v):
-		if ForestData:
-			printerr("Please clear current ForestData")
-		else:
-			_generate()
+		_generate()
 		if _show_aabb_preview:
 			_update_preview()
 @export var tree_count : int = 7
@@ -17,6 +14,8 @@ class_name ForestArea
 		if _show_aabb_preview:
 			_update_preview()
 @export var trees_meshlib : MeshLibrary
+@export var ForestData : ForestAreaData
+@export_category("Debug")
 @export var _view_query_data : bool = false
 @export var _show_aabb_preview : bool = false :
 	set(v):
@@ -25,8 +24,7 @@ class_name ForestArea
 			_update_preview()
 		else:
 			remove_child(_preview_mesh)
-
-@export var ForestData : ForestAreaData
+@export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
 var _temp_meshes : Array[MeshInstance3D]
 var _tree_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
@@ -74,7 +72,7 @@ func _generate():
 			if result:
 				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.YELLOW,0.95))
 				result_positions.append(result.position)
-				hit.position = result.position
+				hit.position = to_local(result.position)
 				_temp_meshes.append(hit)
 
 		for pos in result_positions:
@@ -107,7 +105,7 @@ func _load_forest():
 func _update_preview():
 	if _preview_mesh:
 		remove_child(_preview_mesh)
-	_preview_mesh = draw_debug_box(self.position,_size,Color(Color.RED,0.2))
+	_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
 	add_child(_preview_mesh)
 
 
