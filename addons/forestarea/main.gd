@@ -33,8 +33,12 @@ func _ready():
 	if ForestData:
 		var query = ForestData.query(100000.0,Vector3.ZERO)
 		for pos in query:
-			print(pos)
-			add_child(draw_debug_sphere(pos))
+			var mesh = trees_meshlib.get_item_mesh(query[pos].id)
+			var generation_instance = MeshInstance3D.new()
+			generation_instance.mesh = mesh
+			generation_instance.scale = query[pos].scale
+			generation_instance.position = to_local(pos)
+			add_child(generation_instance)
 func _generate():
 	if is_inside_tree():
 		ForestData = ForestAreaData.new(self.position,_size)
@@ -89,6 +93,8 @@ func _generate():
 				"id": meshlib_id,
 				"scale": _scale,
 			}
+			prints("adding",pos,data)
+			print(to_local(pos))
 			ForestData.insert(pos, data)
 
 		if _view_query_data:

@@ -50,7 +50,7 @@ func subdivide() -> void:
 		children.append(ForestAreaData.new(child_position, child_half_dim))
 
 func query(radius: float, position: Vector3) -> Dictionary:
-#	prints("Querying Node with Boundary:", boundary)
+	print("::: debug: ",position)
 	var items_within_radius = {}
 	if not intersects_sphere(position, radius):
 		return items_within_radius
