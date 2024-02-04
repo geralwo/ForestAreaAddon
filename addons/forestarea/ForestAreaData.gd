@@ -1,3 +1,4 @@
+@tool
 class_name ForestAreaData
 extends Resource
 
@@ -8,10 +9,13 @@ extends Resource
 @export var children : Array = []
 var max_items: int = 16
 
-func _init(_location, _dimensions) -> void:
-	location = _location
-	dimensions = _dimensions
-	aabb = AABB(location - dimensions / 2,dimensions)
+func _init(_location = null, _dimensions = null) -> void:
+	if _location:
+		location = _location
+	if _dimensions:
+		dimensions = _dimensions
+	if location && dimensions:
+		aabb = AABB(location - dimensions / 2,dimensions)
 
 func size() -> int:
 	var count = 1 # Counting the current node

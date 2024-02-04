@@ -33,10 +33,10 @@ var _preview_mesh : MeshInstance3D
 
 func _ready():
 	if ForestData:
-		print(ForestData.aabb)
-		print(ForestData.is_in_bounds(AABB(Vector3.ZERO,Vector3.ONE * 10)))
-		print(ForestData.query(1000.0,Vector3.ZERO))
-
+		var query = ForestData.query(100000.0,Vector3.ZERO)
+		for pos in query:
+			print(pos)
+			add_child(draw_debug_sphere(pos))
 func _generate():
 	if is_inside_tree():
 		ForestData = ForestAreaData.new(self.position,_size)
@@ -74,7 +74,7 @@ func _generate():
 			if result:
 				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.YELLOW,0.95))
 				result_positions.append(result.position)
-				hit.position = to_local(result.position)
+				hit.position = result.position
 				_temp_meshes.append(hit)
 
 		for pos in result_positions:
