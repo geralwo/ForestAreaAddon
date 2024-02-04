@@ -1,6 +1,6 @@
 @tool
 extends EditorPlugin
-var forest = load("res://addons/forestarea/main.gd")
+
 
 func _enter_tree():
 	add_custom_type(

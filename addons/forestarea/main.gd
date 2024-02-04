@@ -1,9 +1,13 @@
 @tool
 extends Node3D
 class_name ForestArea
+
 @export var generate : bool = false :
 	set(_v):
-		_generate()
+		if ForestData:
+			printerr("Please clear current ForestData")
+		else:
+			_generate()
 		if _show_aabb_preview:
 			_update_preview()
 @export var tree_count : int = 7
@@ -13,6 +17,7 @@ class_name ForestArea
 		if _show_aabb_preview:
 			_update_preview()
 @export var trees_meshlib : MeshLibrary
+@export var _view_query_data : bool = false
 @export var _show_aabb_preview : bool = false :
 	set(v):
 		_show_aabb_preview = v
@@ -20,80 +25,84 @@ class_name ForestArea
 			_update_preview()
 		else:
 			remove_child(_preview_mesh)
+
 @export var ForestData : ForestAreaData
 var _temp_meshes : Array[MeshInstance3D]
 var _tree_meshes : Array[MeshInstance3D]
-var _aabb : AABB
-var _view_query_data : bool = false
 var _preview_mesh : MeshInstance3D
 
+func _ready():
+	if ForestData:
+		print(ForestData.aabb)
+		print(ForestData.is_in_bounds(AABB(Vector3.ZERO,Vector3.ONE * 10)))
+		print(ForestData.query(1000.0,Vector3.ZERO))
+
 func _generate():
-	if not ForestData:
-		printerr(self.name," - No Forest Data Resource set. Please assign a ForestAreaData Resource")
-		return
-	if not trees_meshlib:
-		printerr(self.name," - No MeshLibrary set. Please assign a MeshLibrary")
-		return
-	print("::: generating Forest")
-	_aabb = AABB(self.position,_size)
-	var result_positions = []
-	ForestData.location = self.position
-	ForestData.dimensions = _size
-	# Clear existing trees
-	for m in _temp_meshes:
-		if m:
-			m.queue_free()
-	for m in _tree_meshes:
-		if m:
-			m.queue_free()
-	_temp_meshes.clear()
-	_tree_meshes.clear()
-
-	_aabb = AABB(self.position,_size)
-	var space_state = get_world_3d().direct_space_state
-	for i in range(tree_count):
-		var random_position = random_point_in_aabb(_aabb)
-		var query_start = to_global(random_position)
-		var query_end = to_global(random_position + Vector3(0,-_aabb.size.y,0))
-		var hit_s = draw_debug_box(query_start,Vector3.ONE * 5,Color(Color.HOT_PINK,0.15))
-		var hit_e = draw_debug_box(query_end,Vector3.ONE * 5,Color(Color.LIME_GREEN,0.15))
-		hit_s.position = to_local(query_start)
-		hit_e.position = to_local(query_end)
-		_temp_meshes.append(hit_s)
-		_temp_meshes.append(hit_e)
-
-		var query = PhysicsRayQueryParameters3D.create(query_start,query_end) # global coords
-		var result = space_state.intersect_ray(query) # global coords
-
-		if result:
-			var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.YELLOW,0.95))
-			result_positions.append(result.position)
-			hit.position = to_local(result.position)
-			_temp_meshes.append(hit)
-
-
-	for pos in result_positions:
-		var tree_scale = randf_range(1,3)
-		var _scale = Vector3(tree_scale,tree_scale,tree_scale)
-		var meshlib_id = randi() % trees_meshlib.get_item_list().size()
-		var mesh = trees_meshlib.get_item_mesh(meshlib_id)
-		var generation_instance = MeshInstance3D.new()
-		generation_instance.mesh = mesh
-		generation_instance.scale = _scale
-		generation_instance.position = to_local(pos)
-		_tree_meshes.append(generation_instance)
-		var data = {
-			"meshlib": trees_meshlib,
-			"id": meshlib_id,
-			"scale": _scale,
-		}
-		ForestData.insert(pos, data)
-	if _view_query_data:
+	if is_inside_tree():
+		ForestData = ForestAreaData.new(self.position,_size)
+		if not trees_meshlib:
+			printerr(self.name," - No MeshLibrary set. Please assign a MeshLibrary")
+			return
+		print("::: generating Forest")
+		var result_positions = []
+		# Clear existing trees
 		for m in _temp_meshes:
-			add_child(m)
-	for m in _tree_meshes:
-		add_child(m)
+			if m:
+				m.queue_free()
+		for m in _tree_meshes:
+			if m:
+				m.queue_free()
+		_temp_meshes.clear()
+		_tree_meshes.clear()
 
+		var space_state = get_world_3d().direct_space_state
+
+		for i in range(tree_count):
+			var random_position = random_point_in_aabb(ForestData.aabb)
+			var query_start = to_global(random_position)
+			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
+			var hit_s = draw_debug_box(query_start,Vector3.ONE * 5,Color(Color.HOT_PINK,0.15))
+			var hit_e = draw_debug_box(query_end,Vector3.ONE * 5,Color(Color.LIME_GREEN,0.15))
+			hit_s.position = to_local(query_start)
+			hit_e.position = to_local(query_end)
+			_temp_meshes.append(hit_s)
+			_temp_meshes.append(hit_e)
+
+			var query = PhysicsRayQueryParameters3D.create(query_start,query_end) # global coords
+			var result = space_state.intersect_ray(query) # global coords
+
+			if result:
+				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.YELLOW,0.95))
+				result_positions.append(result.position)
+				hit.position = to_local(result.position)
+				_temp_meshes.append(hit)
+
+		for pos in result_positions:
+			var tree_scale = randf_range(1,3)
+			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
+			var meshlib_id = randi() % trees_meshlib.get_item_list().size()
+			var mesh = trees_meshlib.get_item_mesh(meshlib_id)
+			var generation_instance = MeshInstance3D.new()
+			generation_instance.mesh = mesh
+			generation_instance.scale = _scale
+			generation_instance.position = to_local(pos)
+			_tree_meshes.append(generation_instance)
+			var data = {
+				"id": meshlib_id,
+				"scale": _scale,
+			}
+			ForestData.insert(pos, data)
+
+		if _view_query_data:
+			for m in _temp_meshes:
+				add_child(m)
+
+		for m in _tree_meshes:
+			add_child(m)
+
+
+func _load_forest():
+	pass
 
 func _update_preview():
 	if _preview_mesh:
@@ -104,9 +113,9 @@ func _update_preview():
 
 func random_point_in_aabb(aabb: AABB) -> Vector3:
 	var random_point = Vector3(
-			randi_range(-(_aabb.size.x / 2),(_aabb.size.x / 2)),
-			_aabb.size.y / 2,  # Keep Y coordinate constant at max y
-			randi_range(-(_aabb.size.z / 2),(_aabb.size.z / 2))
+			randi_range(-(aabb.size.x / 2),(aabb.size.x / 2)),
+			aabb.size.y / 2,  # Keep Y coordinate constant at max y
+			randi_range(-(aabb.size.z / 2),(aabb.size.z / 2))
 		)
 	return random_point
 

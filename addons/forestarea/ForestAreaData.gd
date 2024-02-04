@@ -1,29 +1,23 @@
-@tool
-class_name ForestAreaData extends Resource
+class_name ForestAreaData
+extends Resource
 
 @export var aabb : AABB
-@export var dimensions : Vector3 :
-	set(v):
-		dimensions = v
-		if v:
-			aabb = AABB(location,dimensions)
+@export var dimensions : Vector3
 @export var location : Vector3
 @export var items : Dictionary = {}
 @export var children : Array = []
 var max_items: int = 16
 
-func _init(_location, _dimensions = null) -> void:
+func _init(_location, _dimensions) -> void:
 	location = _location
-	if dimensions:
-		dimensions = _dimensions
-		aabb = AABB(location,dimensions)
-
+	dimensions = _dimensions
+	aabb = AABB(location - dimensions / 2,dimensions)
 
 func size() -> int:
-		var count = 1 # Counting the current node
-		for child in children:
-			count += child.size()
-		return count
+	var count = 1 # Counting the current node
+	for child in children:
+		count += child.size()
+	return count
 
 func insert(item_position: Vector3, data: Dictionary) -> bool:
 	# dont insert if item position is not inside aabb
@@ -54,7 +48,6 @@ func subdivide() -> void:
 func query(radius: float, position: Vector3) -> Dictionary:
 #	prints("Querying Node with Boundary:", boundary)
 	var items_within_radius = {}
-
 	if not intersects_sphere(position, radius):
 		return items_within_radius
 
@@ -86,23 +79,6 @@ func intersects_sphere(center: Vector3, radius: float) -> bool:
 
 	return squared_distance <= pow(radius, 2)
 
-func save_to_file(path: String) -> void:
-	var success = ResourceSaver.save(self, path)
-	if success == OK:
-		print("saving data to file ",path)
-	else:
-		prints("failed saving file",path)
-		prints("error code:",success)
-
-static func load_from_file(path: String) -> ForestAreaData:
-	var octree_resource = load(path) as ForestAreaData
-	var new_octree = ForestAreaData.new(octree_resource.location)
-	new_octree.dimensions = octree_resource.dimensions
-	new_octree.items = octree_resource.items
-	new_octree.children = octree_resource.children
-	return new_octree
-
-
 func visualize_node(proxy_node : Node):
 	var node = MeshInstance3D.new()
 	# Create sphere with low detail of size.
@@ -122,4 +98,3 @@ func visualize_node(proxy_node : Node):
 	node.position = aabb.get_center()
 	for child in children:
 		child.visualize_node(proxy_node)
-
