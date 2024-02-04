@@ -3,8 +3,16 @@ class_name ForestAreaData
 extends Resource
 
 @export var aabb : AABB
-@export var dimensions : Vector3
-@export var location : Vector3
+@export var dimensions : Vector3:
+	set(v):
+		dimensions = v
+		if location:
+			aabb = AABB(location - dimensions / 2,dimensions)
+@export var location : Vector3:
+	set(v):
+		location = v
+		if dimensions:
+			aabb = AABB(location - dimensions / 2,dimensions)
 @export var items : Dictionary = {}
 @export var children : Array = []
 var max_items: int = 16
@@ -18,14 +26,24 @@ func _init(_location = null, _dimensions = null) -> void:
 		aabb = AABB(location - dimensions / 2,dimensions)
 
 func size() -> int:
+	# total count of nodes
 	var count = 1 # Counting the current node
 	for child in children:
 		count += child.size()
 	return count
 
+func items_size() -> int:
+	var count = items.size()
+
+	for child in children:
+		count += child.items_size()
+
+	return count
+
 func insert(item_position: Vector3, data: Dictionary) -> bool:
 	# dont insert if item position is not inside aabb
 	if not aabb.has_point(item_position):
+		#prints("has not point", item_position,aabb,aabb.encloses(AABB(item_position,Vector3.ONE)))
 		return false
 	# insert into node if items size is smaller than max items and this node has no children
 	if items.size() < max_items and children.size() == 0:
@@ -38,7 +56,7 @@ func insert(item_position: Vector3, data: Dictionary) -> bool:
 	for child in children:
 		if child.insert(item_position, data):
 			return true
-
+	print("just failed")
 	return false
 
 func subdivide() -> void:
@@ -50,7 +68,6 @@ func subdivide() -> void:
 		children.append(ForestAreaData.new(child_position, child_half_dim))
 
 func query(radius: float, position: Vector3) -> Dictionary:
-	print("::: debug: ",position)
 	var items_within_radius = {}
 	if not intersects_sphere(position, radius):
 		return items_within_radius

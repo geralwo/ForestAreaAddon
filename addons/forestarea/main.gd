@@ -16,6 +16,7 @@ class_name ForestArea
 @export var trees_meshlib : MeshLibrary
 @export var ForestData : ForestAreaData
 @export_category("Debug")
+@export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
 @export var _view_query_data : bool = false
 @export var _show_aabb_preview : bool = false :
 	set(v):
@@ -24,22 +25,29 @@ class_name ForestArea
 			_update_preview()
 		else:
 			remove_child(_preview_mesh)
-@export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
 var _temp_meshes : Array[MeshInstance3D]
 var _tree_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
 
 func _ready():
+	for c in get_children():
+		if c.is_in_group("_forest_tree"):
+			c.queue_free()
 	if ForestData:
 		var query = ForestData.query(100000.0,Vector3.ZERO)
 		for pos in query:
 			var mesh = trees_meshlib.get_item_mesh(query[pos].id)
 			var generation_instance = MeshInstance3D.new()
+			generation_instance.add_to_group("_forest_tree")
 			generation_instance.mesh = mesh
 			generation_instance.scale = query[pos].scale
 			generation_instance.position = to_local(pos)
 			add_child(generation_instance)
+	prints("loaded",ForestData.items_size(),"items")
 func _generate():
+	for c in get_children():
+		if c.is_in_group("_forest_tree"):
+			c.queue_free()
 	if is_inside_tree():
 		ForestData = ForestAreaData.new(self.position,_size)
 		if not trees_meshlib:
@@ -58,8 +66,9 @@ func _generate():
 		_tree_meshes.clear()
 
 		var space_state = get_world_3d().direct_space_state
-
-		for i in range(tree_count):
+		var _generated_trees = 0
+		var _error = 0
+		while _generated_trees <= tree_count:
 			var random_position = random_point_in_aabb(ForestData.aabb)
 			var query_start = to_global(random_position)
 			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
@@ -79,23 +88,22 @@ func _generate():
 				hit.position = to_local(result.position)
 				_temp_meshes.append(hit)
 
-		for pos in result_positions:
-			var tree_scale = randf_range(1,3)
-			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
-			var meshlib_id = randi() % trees_meshlib.get_item_list().size()
-			var mesh = trees_meshlib.get_item_mesh(meshlib_id)
-			var generation_instance = MeshInstance3D.new()
-			generation_instance.mesh = mesh
-			generation_instance.scale = _scale
-			generation_instance.position = to_local(pos)
-			_tree_meshes.append(generation_instance)
-			var data = {
-				"id": meshlib_id,
-				"scale": _scale,
-			}
-			prints("adding",pos,data)
-			print(to_local(pos))
-			ForestData.insert(pos, data)
+				var tree_scale = randf_range(1,3)
+				var _scale = Vector3(tree_scale,tree_scale,tree_scale)
+				var meshlib_id = randi() % trees_meshlib.get_item_list().size()
+				var mesh = trees_meshlib.get_item_mesh(meshlib_id)
+				var generation_instance = MeshInstance3D.new()
+				generation_instance.add_to_group("_forest_tree")
+				generation_instance.mesh = mesh
+				generation_instance.scale = _scale
+				generation_instance.position = to_local(result.position)
+				var data = {
+					"id": meshlib_id,
+					"scale": _scale,
+				}
+				if ForestData.insert(result.position, data):
+					_tree_meshes.append(generation_instance)
+					_generated_trees += 1
 
 		if _view_query_data:
 			for m in _temp_meshes:
@@ -111,7 +119,10 @@ func _load_forest():
 func _update_preview():
 	if _preview_mesh:
 		remove_child(_preview_mesh)
-	_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
+	if ForestData:
+		_preview_mesh = draw_debug_box(ForestData.aabb.position,ForestData.aabb.size,_aabb_color)
+	else:
+		_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
 	add_child(_preview_mesh)
 
 
