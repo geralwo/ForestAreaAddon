@@ -25,10 +25,20 @@ class_name ForestArea
 			_update_preview()
 		else:
 			remove_child(_preview_mesh)
+@export var _show_octree_structure : bool = false:
+	set(v):
+		_show_octree_structure = v
+		if v:
+			_view_octree_structure()
+		else:
+			for c in get_children():
+				if c.is_in_group("_octree_visualize"):
+					c.queue_free()
+
 var _temp_meshes : Array[MeshInstance3D]
 var _tree_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
-
+var existing_points : Array = []
 func _ready():
 	for c in get_children():
 		if c.is_in_group("_forest_tree"):
@@ -43,13 +53,17 @@ func _ready():
 			generation_instance.scale = query[pos].scale
 			generation_instance.position = to_local(pos)
 			add_child(generation_instance)
-	prints("loaded",ForestData.items_size(),"items")
+		prints("loaded",ForestData.items_size(),"items")
 func _generate():
+	existing_points.clear()
 	for c in get_children():
 		if c.is_in_group("_forest_tree"):
 			c.queue_free()
 	if is_inside_tree():
-		ForestData = ForestAreaData.new(self.position,_size)
+		_update_preview()
+		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_preview_mesh.mesh.get_aabb().size)
+		remove_child(_preview_mesh)
+		var denied_positions = []
 		if not trees_meshlib:
 			printerr(self.name," - No MeshLibrary set. Please assign a MeshLibrary")
 			return
@@ -68,7 +82,7 @@ func _generate():
 		var space_state = get_world_3d().direct_space_state
 		var _generated_trees = 0
 		var _error = 0
-		while _generated_trees <= tree_count:
+		for i in range(tree_count):
 			var random_position = random_point_in_aabb(ForestData.aabb)
 			var query_start = to_global(random_position)
 			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
@@ -83,35 +97,50 @@ func _generate():
 			var result = space_state.intersect_ray(query) # global coords
 
 			if result:
-				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.YELLOW,0.95))
+				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.SKY_BLUE,0.95))
 				result_positions.append(result.position)
 				hit.position = to_local(result.position)
 				_temp_meshes.append(hit)
-
-				var tree_scale = randf_range(1,3)
-				var _scale = Vector3(tree_scale,tree_scale,tree_scale)
-				var meshlib_id = randi() % trees_meshlib.get_item_list().size()
-				var mesh = trees_meshlib.get_item_mesh(meshlib_id)
-				var generation_instance = MeshInstance3D.new()
-				generation_instance.add_to_group("_forest_tree")
-				generation_instance.mesh = mesh
-				generation_instance.scale = _scale
-				generation_instance.position = to_local(result.position)
-				var data = {
-					"id": meshlib_id,
-					"scale": _scale,
-				}
-				if ForestData.insert(result.position, data):
-					_tree_meshes.append(generation_instance)
-					_generated_trees += 1
-
+		print(ForestData.aabb.get_center())
+		for pos in result_positions:
+			var tree_scale = randf_range(1,3)
+			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
+			var meshlib_id = randi() % trees_meshlib.get_item_list().size()
+			var mesh = trees_meshlib.get_item_mesh(meshlib_id)
+			var generation_instance = MeshInstance3D.new()
+			generation_instance.add_to_group("_forest_tree")
+			generation_instance.mesh = mesh
+			generation_instance.scale = _scale
+			generation_instance.position = to_local(pos)
+			var data = {
+				"id": meshlib_id,
+				"scale": _scale,
+			}
+			if ForestData.insert(pos, data):
+				_tree_meshes.append(generation_instance)
+			else:
+				denied_positions.append(pos)
 		if _view_query_data:
 			for m in _temp_meshes:
 				add_child(m)
-
+			for pos in denied_positions:
+				var x = draw_debug_box(pos,Vector3.ONE * 5,Color.TOMATO)
+				x.add_to_group("_forest_tree")
+				x.position = to_local(pos)
+				add_child(x)
+		if _show_octree_structure:
+			_view_octree_structure()
 		for m in _tree_meshes:
 			add_child(m)
 
+func _view_octree_structure():
+	for c in get_children():
+		if c.is_in_group("_octree_visualize"):
+			c.queue_free()
+	var nodes = ForestAreaData.visualize(ForestData)
+	nodes.add_to_group("_octree_visualize")
+	nodes.global_transform.origin -= self.global_transform.origin
+	add_child(nodes)
 
 func _load_forest():
 	pass
@@ -125,7 +154,6 @@ func _update_preview():
 		_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
 	add_child(_preview_mesh)
 
-
 func random_point_in_aabb(aabb: AABB) -> Vector3:
 	var random_point = Vector3(
 			randi_range(-(aabb.size.x / 2),(aabb.size.x / 2)),
@@ -133,7 +161,6 @@ func random_point_in_aabb(aabb: AABB) -> Vector3:
 			randi_range(-(aabb.size.z / 2),(aabb.size.z / 2))
 		)
 	return random_point
-
 
 func draw_debug_sphere(location: Vector3, size: float = 1.0, col: Color = Color.RED,  radial_segments : int = 8, is_hemisphere : bool = false) -> MeshInstance3D:
 	var node = MeshInstance3D.new()
@@ -161,7 +188,6 @@ func draw_debug_sphere(location: Vector3, size: float = 1.0, col: Color = Color.
 		node.rotation.y = randf()
 	return node
 
-
 func draw_debug_box(location: Vector3, size: Vector3, col: Color = Color.RED) -> MeshInstance3D:
 	var node = MeshInstance3D.new()
 	var box = BoxMesh.new()
@@ -180,3 +206,17 @@ func _exit_tree():
 		m.queue_free()
 	for m in _tree_meshes:
 		m.queue_free()
+
+func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> Vector3:
+	var random_point = random_point_in_aabb(aabb)
+
+	# Check the distance between the new point and existing points
+	for existing_point in existing_points:
+		var distance = random_point.distance_to(existing_point)
+		if distance < min_distance_threshold:
+			# If too close, generate a new point recursively
+			return generate_unique_random_point(aabb, min_distance_threshold)
+
+	# If the point is unique enough, add it to the existing points and return
+	existing_points.append(random_point)
+	return random_point
