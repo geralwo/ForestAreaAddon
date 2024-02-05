@@ -38,7 +38,7 @@ class_name ForestArea
 var _temp_meshes : Array[MeshInstance3D]
 var _tree_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
-var existing_points : Array = []
+
 func _ready():
 	for c in get_children():
 		if c.is_in_group("_forest_tree"):
@@ -207,6 +207,7 @@ func _exit_tree():
 	for m in _tree_meshes:
 		m.queue_free()
 
+var existing_points : Array = []
 func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> Vector3:
 	var random_point = random_point_in_aabb(aabb)
 

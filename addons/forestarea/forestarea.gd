@@ -1,7 +1,6 @@
 @tool
 extends EditorPlugin
 
-
 func _enter_tree():
 	add_custom_type(
 		"ForestArea",
@@ -15,7 +14,6 @@ func _enter_tree():
 		preload("res://addons/forestarea/ForestAreaData.gd"),
 		preload("res://addons/forestarea/forestarea_icon.svg")
 	)
-
 
 func _exit_tree():
 	# Clean-up of the plugin goes here.
