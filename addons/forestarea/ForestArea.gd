@@ -223,11 +223,6 @@ var load_queue = []
 var unload_queue = []
 func load_items_within_radius(_pos,_radius = 100.0):
 	var query = ForestData.query(_radius, _pos)
-	if load_queue.size() > 0:
-		for i in 32:
-			var obj_to_load = load_queue.pop_back()
-			if obj_to_load:
-				add_child(obj_to_load)
 	for pos in query:
 		if not active_objs.has(pos):
 			var generation_instance = query[pos].id.instantiate()
@@ -237,11 +232,6 @@ func load_items_within_radius(_pos,_radius = 100.0):
 			active_objs[pos] = generation_instance
 
 func unload_items_outside_radius(_pos,_radius = 100.0):
-	if unload_queue.size() > 0:
-		for i in 32:
-			var obj_to_unload = unload_queue.pop_back()
-			if obj_to_unload:
-				remove_child(obj_to_unload)
 	var positions_to_unload = []
 	for pos in active_objs.keys():
 		if pos.distance_to(_pos) > _radius * 1.0:
