@@ -1,3 +1,6 @@
 /*
 /*/
 !/addons/forestarea/
+!test.tscn
+!plane.material
+!test_meshes.meshlib

@@ -2,27 +2,31 @@
 extends Node3D
 class_name ForestArea
 
+# TODO:
+# fix issue when rotating the area, the raycasts dont seem to be rotated with it
+
 @export var generate : bool = false :
 	set(_v):
 		_generate()
 		if _show_aabb_preview:
-			_update_preview()
+			_update_aabb_preview()
 @export var tree_count : int = 7
 @export var _size : Vector3 = Vector3(100,100,100):
 	set(v):
 		_size = v
 		if _show_aabb_preview:
-			_update_preview()
+			_generate()
 @export var trees_meshlib : MeshLibrary
+@export var SceneCollection : Array[PackedScene]
 @export var ForestData : ForestAreaData
 @export_category("Debug")
 @export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
 @export var _view_query_data : bool = false
-@export var _show_aabb_preview : bool = false :
+@export var _show_aabb_preview : bool = true :
 	set(v):
 		_show_aabb_preview = v
 		if v:
-			_update_preview()
+			_update_aabb_preview()
 		else:
 			remove_child(_preview_mesh)
 @export var _show_octree_structure : bool = false:
@@ -40,6 +44,7 @@ var _tree_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
 
 func _ready():
+	self.top_level = true
 	for c in get_children():
 		if c.is_in_group("_forest_tree"):
 			c.queue_free()
@@ -55,14 +60,14 @@ func _ready():
 			add_child(generation_instance)
 		prints("loaded",ForestData.items_size(),"items")
 func _generate():
+	ForestData = null
 	existing_points.clear()
 	for c in get_children():
 		if c.is_in_group("_forest_tree"):
 			c.queue_free()
 	if is_inside_tree():
-		_update_preview()
+		_update_aabb_preview()
 		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_preview_mesh.mesh.get_aabb().size)
-		remove_child(_preview_mesh)
 		var denied_positions = []
 		if not trees_meshlib:
 			printerr(self.name," - No MeshLibrary set. Please assign a MeshLibrary")
@@ -78,7 +83,6 @@ func _generate():
 				m.queue_free()
 		_temp_meshes.clear()
 		_tree_meshes.clear()
-
 		var space_state = get_world_3d().direct_space_state
 		var _generated_trees = 0
 		var _error = 0
@@ -86,6 +90,7 @@ func _generate():
 			var random_position = random_point_in_aabb(ForestData.aabb)
 			var query_start = to_global(random_position)
 			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
+
 			var hit_s = draw_debug_box(query_start,Vector3.ONE * 5,Color(Color.HOT_PINK,0.15))
 			var hit_e = draw_debug_box(query_end,Vector3.ONE * 5,Color(Color.LIME_GREEN,0.15))
 			hit_s.position = to_local(query_start)
@@ -130,6 +135,8 @@ func _generate():
 				add_child(x)
 		if _show_octree_structure:
 			_view_octree_structure()
+		if _show_aabb_preview:
+			_update_aabb_preview()
 		for m in _tree_meshes:
 			add_child(m)
 
@@ -145,14 +152,15 @@ func _view_octree_structure():
 func _load_forest():
 	pass
 
-func _update_preview():
+func _update_aabb_preview():
 	if _preview_mesh:
 		remove_child(_preview_mesh)
 	if ForestData:
 		_preview_mesh = draw_debug_box(ForestData.aabb.position,ForestData.aabb.size,_aabb_color)
+		add_child(_preview_mesh)
 	else:
 		_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
-	add_child(_preview_mesh)
+
 
 func random_point_in_aabb(aabb: AABB) -> Vector3:
 	var random_point = Vector3(

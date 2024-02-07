@@ -98,8 +98,24 @@ func intersects_sphere(center: Vector3, radius: float) -> bool:
 
 static func visualize(data: ForestAreaData) -> Node3D:
 	return visualize_node(data.aabb, data.children)
+
 static func visualize_node(aabb: AABB, children: Array) -> Node3D:
 	var all = Node3D.new()
+	for i in range(1,8):
+		var minst = MeshInstance3D.new()
+		minst.top_level = true
+		minst.global_transform.origin = aabb.get_endpoint(i)
+		var mesh = BoxMesh.new()
+		mesh.size = Vector3(10,i,10)
+
+		var material = StandardMaterial3D.new()
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.albedo_color = Color.BROWN
+		material.flags_unshaded = true
+		mesh.surface_set_material(0, material)
+
+		minst.mesh = mesh
+		all.add_child(minst)
 	var node = MeshInstance3D.new()
 	node.add_to_group("_octree_visualize")
 	node.position = aabb.get_center()
