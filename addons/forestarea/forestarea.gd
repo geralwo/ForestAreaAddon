@@ -10,15 +10,16 @@ class_name ForestArea
 		_generate()
 		if _show_aabb_preview:
 			_update_aabb_preview()
-@export var tree_count : int = 7
+@export var max_tree_count : int = 7
 @export var _size : Vector3 = Vector3(100,100,100):
 	set(v):
 		_size = v
 		if _show_aabb_preview:
 			_generate()
-@export var trees_meshlib : MeshLibrary
+@export var tree_growing_group : String = "terrain"
 @export var scenes : SceneCollection
 @export var ForestData : ForestAreaData
+@export var editor_render_distance : float = 100.0
 @export_category("Debug")
 @export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
 @export var _view_query_data : bool = false
@@ -43,21 +44,14 @@ var _temp_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
 
 func _ready():
-	self.top_level = true
-	for c in get_children():
-		if c.is_in_group("_forest_tree"):
-			c.queue_free()
 	if ForestData:
-		#var query = ForestData.query(100000.0,Vector3.ZERO)
-		#for pos in query:
-			#var generation_instance = query[pos].id.instantiate()
-			#generation_instance.add_to_group("_forest_tree")
-			#generation_instance.position = to_local(pos)
-			#add_child(generation_instance)
-		load_items_within_radius(self.position,50)
-		prints("loaded",ForestData.items_size(),"items")
+		prints(self.name, "has", ForestData.items_size(),"trees")
 
 func _process(delta):
+	if Engine.is_editor_hint():
+		load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+		unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+
 	if load_queue.size() > 0:
 		for i in 32:
 			var obj_to_load = load_queue.pop_back()
@@ -72,9 +66,7 @@ func _process(delta):
 func _generate():
 	ForestData = null
 	existing_points.clear()
-	for c in get_children():
-		if c.is_in_group("_forest_tree"):
-			c.queue_free()
+	_create_imposters()
 	if is_inside_tree():
 		_update_aabb_preview()
 		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_preview_mesh.mesh.get_aabb().size)
@@ -92,7 +84,7 @@ func _generate():
 		var space_state = get_world_3d().direct_space_state
 		var _generated_trees = 0
 		var _error = 0
-		for i in range(tree_count):
+		for i in range(max_tree_count):
 			var random_position = random_point_in_aabb(ForestData.aabb)
 			var query_start = to_global(random_position)
 			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
@@ -107,18 +99,17 @@ func _generate():
 			var query = PhysicsRayQueryParameters3D.create(query_start,query_end) # global coords
 			var result = space_state.intersect_ray(query) # global coords
 
-			if result:
+			if result && result.collider.is_in_group(tree_growing_group):
 				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.SKY_BLUE,0.95))
 				result_positions.append(result.position)
 				hit.position = to_local(result.position)
 				_temp_meshes.append(hit)
-		print(ForestData.aabb.get_center())
 		for pos in result_positions:
 			var tree_scale = randf_range(1,3)
 			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
 			var scene_id = scenes.give_random_item()
 			var generation_instance = scene_id.instantiate()
-			generation_instance.add_to_group("_forest_tree")
+			generation_instance.add_to_group("_forest_tree_tmp")
 			generation_instance.position = to_local(pos)
 			var data = {
 				"id": scene_id,
@@ -126,7 +117,6 @@ func _generate():
 			}
 			if ForestData.insert(pos, data):
 				add_child(generation_instance)
-				print(pos)
 			else:
 				denied_positions.append(pos)
 		if _view_query_data:
@@ -151,7 +141,7 @@ func _view_octree_structure():
 	nodes.global_transform.origin -= self.global_transform.origin
 	add_child(nodes)
 
-func _load_forest():
+func _create_imposters():
 	pass
 
 func _update_aabb_preview():
@@ -233,6 +223,11 @@ var load_queue = []
 var unload_queue = []
 func load_items_within_radius(_pos,_radius = 100.0):
 	var query = ForestData.query(_radius, _pos)
+	if load_queue.size() > 0:
+		for i in 32:
+			var obj_to_load = load_queue.pop_back()
+			if obj_to_load:
+				add_child(obj_to_load)
 	for pos in query:
 		if not active_objs.has(pos):
 			var generation_instance = query[pos].id.instantiate()
@@ -242,6 +237,11 @@ func load_items_within_radius(_pos,_radius = 100.0):
 			active_objs[pos] = generation_instance
 
 func unload_items_outside_radius(_pos,_radius = 100.0):
+	if unload_queue.size() > 0:
+		for i in 32:
+			var obj_to_unload = unload_queue.pop_back()
+			if obj_to_unload:
+				remove_child(obj_to_unload)
 	var positions_to_unload = []
 	for pos in active_objs.keys():
 		if pos.distance_to(_pos) > _radius * 1.0:
