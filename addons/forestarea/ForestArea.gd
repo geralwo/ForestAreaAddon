@@ -5,24 +5,30 @@ class_name ForestArea
 # TODO:
 # fix issue when rotating the area, the raycasts dont seem to be rotated with it
 
+## Generates a new forest
 @export var generate : bool = false :
 	set(_v):
 		_generate()
 		if _show_aabb_preview:
 			_update_aabb_preview()
-@export var max_tree_count : int = 7
+## Defines the area of the Forest as an AABB
 @export var _size : Vector3 = Vector3(100,100,100):
 	set(v):
 		_size = v
 		if _show_aabb_preview:
-			_generate()
+			_update_aabb_preview()
+## Sets the max amount of trees in the area. Usually it's less
+@export var max_tree_count : int = 7
+## Max degree angle on which trees grow
+@export var max_slope : float = 45.0
+## The group on which trees grow
 @export var tree_growing_group : String = "terrain"
+## The scenes to be instanced
 @export var scenes : Array[PackedScene]
 @export var ForestData : ForestAreaData
-@export var editor_render_distance : float = 100.0
-@export_category("Debug")
-@export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
-@export var _view_query_data : bool = false
+## Sets the editor render distance
+@export var editor_render_distance : float = 250.0
+## Shows the bounding box of the Forest
 @export var _show_aabb_preview : bool = true :
 	set(v):
 		_show_aabb_preview = v
@@ -31,6 +37,12 @@ class_name ForestArea
 		else:
 			if _preview_mesh:
 				_preview_mesh.queue_free()
+@export_category("Debug")
+@export_group("Settings")
+@export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
+## Shows the positions of the raycasts
+@export var _view_query_data : bool = false
+## Visualizes the octree structure
 @export var _show_octree_structure : bool = false:
 	set(v):
 		_show_octree_structure = v
@@ -41,30 +53,41 @@ class_name ForestArea
 				if c.is_in_group("_octree_visualize"):
 					c.queue_free()
 
+
 var _temp_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
+var _multi_mesh_instance : MultiMeshInstance3D
+var _multi_mesh : MultiMesh
 
 signal generation_done
 
 func _ready():
 	if ForestData:
+		_multi_mesh_instance = MultiMeshInstance3D.new()
+		_multi_mesh = MultiMesh.new()
+		_multi_mesh_instance.multimesh = _multi_mesh
+		_multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
+		_multi_mesh_instance.instance_count = ForestData.items_size()
 		prints(self.name, "has", ForestData.items_size(),"trees")
 
 func _process(delta):
-	if Engine.is_editor_hint():
-		if ForestData:
+	#if Engine.is_editor_hint():
+	if ForestData:
+		if Engine.get_frames_drawn() % 2 != 0: # on uneven frames
 			load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 			unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-	if load_queue.size() > 0:
-		for i in 32:
-			var obj_to_load = load_queue.pop_back()
-			if obj_to_load:
-				add_child(obj_to_load)
-	if unload_queue.size() > 0:
-		for i in 32:
-			var obj_to_unload = unload_queue.pop_back()
-			if obj_to_unload:
-				obj_to_unload.queue_free()
+
+	if Engine.get_frames_drawn() % 2 == 0: # on even frames
+		if load_queue.size() > 0:
+			for i in 32:
+				var obj_to_load = load_queue.pop_back()
+				if obj_to_load:
+					add_child(obj_to_load)
+		if unload_queue.size() > 0:
+			for i in 32:
+				var obj_to_unload = unload_queue.pop_back()
+				if obj_to_unload:
+					obj_to_unload.queue_free()
 
 func _generate():
 	if ForestData:
@@ -110,10 +133,23 @@ func _generate():
 			var result = space_state.intersect_ray(query) # global coords
 
 			if result && result.collider.is_in_group(tree_growing_group):
-				var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.SKY_BLUE,0.95))
-				result_positions.append(result.position)
-				hit.position = to_local(result.position)
-				_temp_meshes.append(hit)
+				var up_direction = Vector3.UP
+
+				# Calculate the dot product between the normal and the up direction
+				var dot_product = result.normal.dot(up_direction)
+
+				# Calculate the angle in radians
+				var angle_rad = acos(dot_product)
+
+				# Convert the angle to degrees if needed
+				var angle_deg = rad_to_deg(angle_rad)
+
+				# The slope is the complement of this angle (in degrees)
+				if angle_deg < max_slope:
+					var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.SKY_BLUE,0.95))
+					result_positions.append(result.position)
+					hit.position = to_local(result.position)
+					_temp_meshes.append(hit)
 		for pos in result_positions:
 			var tree_scale = randf_range(1,3)
 			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
@@ -154,8 +190,7 @@ func _create_imposters():
 
 func _update_aabb_preview():
 	if _preview_mesh:
-		_preview_mesh.queue_free()
-		_preview_mesh = null
+		_preview_mesh.free()
 	if ForestData:
 		_preview_mesh = draw_debug_box(ForestData.aabb.position,ForestData.aabb.size,_aabb_color)
 		add_child(_preview_mesh)
