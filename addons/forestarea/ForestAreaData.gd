@@ -28,6 +28,10 @@ func items_size() -> int:
 
 	return count
 
+func clear():
+	items.clear()
+	children.clear()
+
 func insert(item_position: Vector3, data: Dictionary) -> bool:
 	# dont insert if item position is not inside aabb
 	if not aabb.has_point(item_position):

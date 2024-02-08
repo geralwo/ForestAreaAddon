@@ -17,7 +17,7 @@ class_name ForestArea
 		if _show_aabb_preview:
 			_generate()
 @export var tree_growing_group : String = "terrain"
-@export var scenes : SceneCollection
+@export var scenes : Array[PackedScene]
 @export var ForestData : ForestAreaData
 @export var editor_render_distance : float = 100.0
 @export_category("Debug")
@@ -29,7 +29,8 @@ class_name ForestArea
 		if v:
 			_update_aabb_preview()
 		else:
-			remove_child(_preview_mesh)
+			if _preview_mesh:
+				_preview_mesh.queue_free()
 @export var _show_octree_structure : bool = false:
 	set(v):
 		_show_octree_structure = v
@@ -43,15 +44,17 @@ class_name ForestArea
 var _temp_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
 
+signal generation_done
+
 func _ready():
 	if ForestData:
 		prints(self.name, "has", ForestData.items_size(),"trees")
 
 func _process(delta):
 	if Engine.is_editor_hint():
-		load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-		unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-
+		if ForestData:
+			load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+			unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 	if load_queue.size() > 0:
 		for i in 32:
 			var obj_to_load = load_queue.pop_back()
@@ -61,18 +64,25 @@ func _process(delta):
 		for i in 32:
 			var obj_to_unload = unload_queue.pop_back()
 			if obj_to_unload:
-				remove_child(obj_to_unload)
+				obj_to_unload.queue_free()
 
 func _generate():
-	ForestData = null
+	if ForestData:
+		ForestData.clear()
+
 	existing_points.clear()
-	_create_imposters()
+	load_queue.clear()
+	unload_queue.clear()
+	for c in get_children():
+		if c.is_in_group("_forest_tree_tmp"):
+			if c:
+				c.queue_free()
 	if is_inside_tree():
 		_update_aabb_preview()
 		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_preview_mesh.mesh.get_aabb().size)
 		var denied_positions = []
-		if not SceneCollection:
-			printerr(self.name," - No SceneCollection set. Please add a Scene")
+		if scenes.size() == 0:
+			printerr(self.name," - Please add a Scene")
 			return
 		print("::: generating Forest")
 		var result_positions = []
@@ -107,30 +117,28 @@ func _generate():
 		for pos in result_positions:
 			var tree_scale = randf_range(1,3)
 			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
-			var scene_id = scenes.give_random_item()
-			var generation_instance = scene_id.instantiate()
-			generation_instance.add_to_group("_forest_tree_tmp")
-			generation_instance.position = to_local(pos)
+			var scene_id = randi() % scenes.size()
 			var data = {
 				"id": scene_id,
 				"scale": _scale,
 			}
-			if ForestData.insert(pos, data):
-				add_child(generation_instance)
-			else:
+			if not ForestData.insert(pos, data):
 				denied_positions.append(pos)
 		if _view_query_data:
 			for m in _temp_meshes:
 				add_child(m)
 			for pos in denied_positions:
 				var x = draw_debug_box(pos,Vector3.ONE * 5,Color.TOMATO)
-				x.add_to_group("_forest_tree")
+				x.add_to_group("_forest_tree_tmp")
 				x.position = to_local(pos)
 				add_child(x)
 		if _show_octree_structure:
 			_view_octree_structure()
 		if _show_aabb_preview:
 			_update_aabb_preview()
+
+		emit_signal("generation_done")
+
 
 func _view_octree_structure():
 	for c in get_children():
@@ -146,12 +154,14 @@ func _create_imposters():
 
 func _update_aabb_preview():
 	if _preview_mesh:
-		remove_child(_preview_mesh)
+		_preview_mesh.queue_free()
+		_preview_mesh = null
 	if ForestData:
 		_preview_mesh = draw_debug_box(ForestData.aabb.position,ForestData.aabb.size,_aabb_color)
 		add_child(_preview_mesh)
 	else:
 		_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
+		add_child(_preview_mesh)
 
 func random_point_in_aabb(aabb: AABB) -> Vector3:
 	var random_point = Vector3(
@@ -225,8 +235,8 @@ func load_items_within_radius(_pos,_radius = 100.0):
 	var query = ForestData.query(_radius, _pos)
 	for pos in query:
 		if not active_objs.has(pos):
-			var generation_instance = query[pos].id.instantiate()
-			generation_instance.add_to_group("_forest_tree")
+			var generation_instance = scenes[query[pos].id].instantiate()
+			generation_instance.add_to_group("_forest_tree_tmp")
 			generation_instance.position = to_local(pos)
 			add_child(generation_instance)
 			active_objs[pos] = generation_instance

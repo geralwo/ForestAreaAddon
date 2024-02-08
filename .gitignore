@@ -1,4 +1,6 @@
 /*
 /*/
+/addons/forestarea/*.import
+/addons/forestarea/example/*.import
 !/addons/forestarea/
-!/addons/forestarea/*/
+!/addons/forestarea/example/
