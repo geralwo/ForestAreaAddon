@@ -24,7 +24,7 @@ class_name ForestArea
 ## The group on which trees grow
 @export var tree_growing_group : String = "terrain"
 ## The scenes to be instanced
-@export var scenes : Array[PackedScene]
+@export var flora : Array[TreeBase] = []
 @export var ForestData : ForestAreaData
 ## Sets the editor render distance
 @export var editor_render_distance : float = 250.0
@@ -34,9 +34,6 @@ class_name ForestArea
 		_show_aabb_preview = v
 		if v:
 			_update_aabb_preview()
-		else:
-			if _preview_mesh:
-				_preview_mesh.queue_free()
 @export_category("Debug")
 @export_group("Settings")
 @export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
@@ -54,45 +51,60 @@ class_name ForestArea
 					c.queue_free()
 
 
+var lod0_distance = 100.0
+var lod1_distance = 200.0
+
+
 var _temp_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D
-var _multi_mesh_instance : MultiMeshInstance3D
-var _multi_mesh : MultiMesh
+var _multi_mesh_instance_lod0 : MultiMeshInstance3D
+var _multi_mesh_instance_lod1 : MultiMeshInstance3D
+var _multi_mesh_instance_lod2 : MultiMeshInstance3D
+var _multi_mesh_instance_lod3 : MultiMeshInstance3D
 
+var _multi_mesh_lod0 : MultiMesh
+var _multi_mesh_lod1 : MultiMesh
+var _multi_mesh_lod2 : MultiMesh
+var _multi_mesh_lod3 : MultiMesh
+
+
+var inactive_objs = {}
+var active_objs = {}
+var load_queue = []
+var unload_queue = []
 signal generation_done
 
 func _ready():
 	if ForestData:
-		_multi_mesh_instance = MultiMeshInstance3D.new()
-		_multi_mesh = MultiMesh.new()
-		_multi_mesh_instance.multimesh = _multi_mesh
-		_multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
-		_multi_mesh_instance.instance_count = ForestData.items_size()
-		prints(self.name, "has", ForestData.items_size(),"trees")
+		if flora:
+			_multi_mesh_lod0 = MultiMesh.new()
+			_multi_mesh_lod1 = MultiMesh.new()
+			_multi_mesh_lod2 = MultiMesh.new()
+			_multi_mesh_lod3 = MultiMesh.new()
+			_multi_mesh_lod0.transform_format = MultiMesh.TRANSFORM_3D
+			_multi_mesh_lod1.transform_format = MultiMesh.TRANSFORM_3D
+			_multi_mesh_lod2.transform_format = MultiMesh.TRANSFORM_3D
+			_multi_mesh_lod3.transform_format = MultiMesh.TRANSFORM_3D
 
+			_multi_mesh_instance_lod0 = MultiMeshInstance3D.new()
+			_multi_mesh_instance_lod1 = MultiMeshInstance3D.new()
+			_multi_mesh_instance_lod2 = MultiMeshInstance3D.new()
+			_multi_mesh_instance_lod3 = MultiMeshInstance3D.new()
+			prints(self.name, "has", ForestData.items_size(),"trees")
+			add_child(_multi_mesh_instance_lod0)
+			add_child(_multi_mesh_instance_lod1)
+			add_child(_multi_mesh_instance_lod2)
+			add_child(_multi_mesh_instance_lod3)
 func _process(delta):
-	#if Engine.is_editor_hint():
-	if ForestData:
-		if Engine.get_frames_drawn() % 2 != 0: # on uneven frames
-			load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-			unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-
-	if Engine.get_frames_drawn() % 2 == 0: # on even frames
-		if load_queue.size() > 0:
-			for i in 32:
-				var obj_to_load = load_queue.pop_back()
-				if obj_to_load:
-					add_child(obj_to_load)
-		if unload_queue.size() > 0:
-			for i in 32:
-				var obj_to_unload = unload_queue.pop_back()
-				if obj_to_unload:
-					obj_to_unload.queue_free()
+	if ForestData && flora:
+		if Engine.is_editor_hint():
+			if Engine.get_frames_drawn() % 2 != 0: # on uneven frames
+				load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+				#unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 
 func _generate():
 	if ForestData:
 		ForestData.clear()
-
 	existing_points.clear()
 	load_queue.clear()
 	unload_queue.clear()
@@ -104,10 +116,10 @@ func _generate():
 		_update_aabb_preview()
 		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_preview_mesh.mesh.get_aabb().size)
 		var denied_positions = []
-		if scenes.size() == 0:
+		if flora.size() == 0:
+			ForestData = null
 			printerr(self.name," - Please add a Scene")
 			return
-		print("::: generating Forest")
 		var result_positions = []
 		# Clear existing trees
 		for m in _temp_meshes:
@@ -134,29 +146,26 @@ func _generate():
 
 			if result && result.collider.is_in_group(tree_growing_group):
 				var up_direction = Vector3.UP
-
-				# Calculate the dot product between the normal and the up direction
 				var dot_product = result.normal.dot(up_direction)
-
-				# Calculate the angle in radians
 				var angle_rad = acos(dot_product)
-
-				# Convert the angle to degrees if needed
 				var angle_deg = rad_to_deg(angle_rad)
 
-				# The slope is the complement of this angle (in degrees)
 				if angle_deg < max_slope:
 					var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.SKY_BLUE,0.95))
 					result_positions.append(result.position)
 					hit.position = to_local(result.position)
 					_temp_meshes.append(hit)
 		for pos in result_positions:
+			var _basis = Basis().rotated(Vector3.UP,randf())
 			var tree_scale = randf_range(1,3)
 			var _scale = Vector3(tree_scale,tree_scale,tree_scale)
-			var scene_id = randi() % scenes.size()
+			_basis = _basis.scaled(_scale)
+			var scene_id = randi() % flora.size()
+			var instance_transform = Transform3D(_basis,to_local(pos))
 			var data = {
-				"id": scene_id,
+				"index": scene_id,
 				"scale": _scale,
+				"transform": instance_transform,
 			}
 			if not ForestData.insert(pos, data):
 				denied_positions.append(pos)
@@ -174,7 +183,6 @@ func _generate():
 			_update_aabb_preview()
 
 		emit_signal("generation_done")
-
 
 func _view_octree_structure():
 	for c in get_children():
@@ -260,21 +268,52 @@ func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> 
 	existing_points.append(random_point)
 	return random_point
 
-
-
-var inactive_objs = {}
-var active_objs = {}
-var load_queue = []
-var unload_queue = []
-func load_items_within_radius(_pos,_radius = 100.0):
+func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 	var query = ForestData.query(_radius, _pos)
+	var lod0 = []
+	var lod1 = []
+	var lod2 = []
+	var lod3 = []
+
+	if flora[0].LOD[0]:
+		_multi_mesh_lod0.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
+	if flora[0].LOD[1]:
+		_multi_mesh_lod1.mesh = flora[0].LOD[1]
+		_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
+	if flora[0].LOD[2]:
+		_multi_mesh_lod2.mesh = flora[0].LOD[2]
+		_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod2
+	#if scenes[0].LOD[3]:
+		#_multi_mesh_lod3.mesh = scenes[0].LOD[3]
+		#_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod3
+	var i0 = 0
+	var i1 = 0
+	var i2 = 0
+	var i3 = 0
+
 	for pos in query:
-		if not active_objs.has(pos):
-			var generation_instance = scenes[query[pos].id].instantiate()
-			generation_instance.add_to_group("_forest_tree_tmp")
-			generation_instance.position = to_local(pos)
-			add_child(generation_instance)
-			active_objs[pos] = generation_instance
+		var _transform = Transform3D(Basis(),to_local(pos))
+		if _pos.distance_to(pos) < lod0_distance:
+			lod0.append(query[pos].transform)
+			i0 += 1
+		elif _pos.distance_to(pos) < lod1_distance:
+			lod1.append(query[pos].transform)
+		else:
+			lod2.append(query[pos].transform)
+
+	_multi_mesh_lod0.instance_count = lod0.size()
+	_multi_mesh_lod1.instance_count = lod1.size()
+	_multi_mesh_lod2.instance_count = lod2.size()
+	_multi_mesh_lod3.instance_count = lod3.size()
+	for i in range(lod0.size()):
+		_multi_mesh_lod0.set_instance_transform(i,lod0[i])
+	for i in range(lod1.size()):
+		_multi_mesh_lod1.set_instance_transform(i,lod1[i])
+	for i in range(lod2.size()):
+		_multi_mesh_lod2.set_instance_transform(i,lod2[i])
+	#for i in range(lod3.size()):
+		#_multi_mesh_lod3.set_instance_transform(i,lod3[i])
 
 func unload_items_outside_radius(_pos,_radius = 100.0):
 	var positions_to_unload = []
