@@ -24,7 +24,7 @@ class_name ForestArea
 ## The group on which trees grow
 @export var tree_growing_group : String = "terrain"
 ## The scenes to be instanced
-@export var flora : Array[TreeBase] = []
+@export var flora : Array[TreeBase]
 @export var ForestData : ForestAreaData
 ## Sets the editor render distance
 @export var editor_render_distance : float = 250.0
@@ -32,8 +32,8 @@ class_name ForestArea
 @export var _show_aabb_preview : bool = true :
 	set(v):
 		_show_aabb_preview = v
-		if v:
-			_update_aabb_preview()
+		_update_aabb_preview()
+@export var lod_curve : Curve = Curve.new()
 @export_category("Debug")
 @export_group("Settings")
 @export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
@@ -56,7 +56,7 @@ var lod1_distance = 200.0
 
 
 var _temp_meshes : Array[MeshInstance3D]
-var _preview_mesh : MeshInstance3D
+var _preview_mesh : MeshInstance3D = MeshInstance3D.new()
 var _multi_mesh_instance_lod0 : MultiMeshInstance3D
 var _multi_mesh_instance_lod1 : MultiMeshInstance3D
 var _multi_mesh_instance_lod2 : MultiMeshInstance3D
@@ -75,6 +75,8 @@ var unload_queue = []
 signal generation_done
 
 func _ready():
+	add_child(_preview_mesh)
+	_preview_mesh.visible = _show_aabb_preview
 	if ForestData:
 		if flora:
 			_multi_mesh_lod0 = MultiMesh.new()
@@ -103,23 +105,19 @@ func _process(delta):
 				#unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 
 func _generate():
+	print(_preview_mesh.mesh.get_aabb())
 	if ForestData:
 		ForestData.clear()
-	existing_points.clear()
-	load_queue.clear()
-	unload_queue.clear()
-	for c in get_children():
-		if c.is_in_group("_forest_tree_tmp"):
-			if c:
-				c.queue_free()
-	if is_inside_tree():
-		_update_aabb_preview()
-		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_preview_mesh.mesh.get_aabb().size)
-		var denied_positions = []
+	else:
 		if flora.size() == 0:
-			ForestData = null
-			printerr(self.name," - Please add a Scene")
-			return
+			printerr("Missing Flora. No flora assigned to %s" % self.name )
+		ForestData = ForestAreaData.new()
+	existing_points.clear()
+	if is_inside_tree():
+		_update_aabb_preview(true)
+		print(_preview_mesh.mesh.get_aabb())
+		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_size)
+		var denied_positions = []
 		var result_positions = []
 		# Clear existing trees
 		for m in _temp_meshes:
@@ -179,8 +177,7 @@ func _generate():
 				add_child(x)
 		if _show_octree_structure:
 			_view_octree_structure()
-		if _show_aabb_preview:
-			_update_aabb_preview()
+		_update_aabb_preview()
 
 		emit_signal("generation_done")
 
@@ -196,15 +193,34 @@ func _view_octree_structure():
 func _create_imposters():
 	pass
 
-func _update_aabb_preview():
-	if _preview_mesh:
-		_preview_mesh.free()
-	if ForestData:
-		_preview_mesh = draw_debug_box(ForestData.aabb.position,ForestData.aabb.size,_aabb_color)
-		add_child(_preview_mesh)
+func _update_aabb_preview(force : bool = false):
+	prints("shoud show preview:",_show_aabb_preview, "force:",force)
+	if _show_aabb_preview or force:
+		if ForestData:
+			var box = BoxMesh.new()
+			box.size = ForestData.aabb.size
+			var material = StandardMaterial3D.new()
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.albedo_color = _aabb_color
+			material.flags_unshaded = true
+			box.surface_set_material(0, material)
+			#_preview_mesh = draw_debug_box(ForestData.aabb.position,ForestData.aabb.size,_aabb_color)
+			_preview_mesh.mesh = box
+			_preview_mesh.visible = true
+		else:
+			#_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
+			#_preview_mesh.visible = true
+			var box = BoxMesh.new()
+			box.size = _size
+			var material = StandardMaterial3D.new()
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			material.albedo_color = _aabb_color
+			material.flags_unshaded = true
+			box.surface_set_material(0, material)
+			_preview_mesh.mesh = box
+			_preview_mesh.visible = true
 	else:
-		_preview_mesh = draw_debug_box(self.position,_size,_aabb_color)
-		add_child(_preview_mesh)
+		_preview_mesh.visible = false
 
 func random_point_in_aabb(aabb: AABB) -> Vector3:
 	var random_point = Vector3(
@@ -268,6 +284,7 @@ func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> 
 	existing_points.append(random_point)
 	return random_point
 
+
 func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 	var query = ForestData.query(_radius, _pos)
 	var lod0 = []
@@ -275,45 +292,77 @@ func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 	var lod2 = []
 	var lod3 = []
 
-	if flora[0].LOD[0]:
+	if flora[0].LOD.size() == 1:
 		_multi_mesh_lod0.mesh = flora[0].LOD[0]
 		_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
-	if flora[0].LOD[1]:
+		_multi_mesh_lod1.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod0
+		_multi_mesh_lod2.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod0
+		_multi_mesh_lod3.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod0
+	elif flora[0].LOD.size() == 2:
+		_multi_mesh_lod0.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
 		_multi_mesh_lod1.mesh = flora[0].LOD[1]
 		_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
-	if flora[0].LOD[2]:
+		_multi_mesh_lod2.mesh = flora[0].LOD[1]
+		_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod1
+		_multi_mesh_lod3.mesh = flora[0].LOD[1]
+		_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod1
+	elif flora[0].LOD.size() == 3:
+		_multi_mesh_lod0.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
+		_multi_mesh_lod1.mesh = flora[0].LOD[1]
+		_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
 		_multi_mesh_lod2.mesh = flora[0].LOD[2]
 		_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod2
-	#if scenes[0].LOD[3]:
-		#_multi_mesh_lod3.mesh = scenes[0].LOD[3]
-		#_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod3
+		_multi_mesh_lod3.mesh = flora[0].LOD[2]
+		_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod2
+	elif flora[0].LOD.size() == 4:
+		_multi_mesh_lod0.mesh = flora[0].LOD[0]
+		_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
+		_multi_mesh_lod1.mesh = flora[0].LOD[1]
+		_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
+		_multi_mesh_lod2.mesh = flora[0].LOD[2]
+		_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod2
+		_multi_mesh_lod3.mesh = flora[0].LOD[3]
+		_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod3
+	else:
+		printerr("wrong number of lods")
+		return
 	var i0 = 0
 	var i1 = 0
 	var i2 = 0
 	var i3 = 0
 
 	for pos in query:
-		var _transform = Transform3D(Basis(),to_local(pos))
-		if _pos.distance_to(pos) < lod0_distance:
+		if _pos.distance_to(pos) < _radius * lod_curve.sample(0.25):
 			lod0.append(query[pos].transform)
 			i0 += 1
-		elif _pos.distance_to(pos) < lod1_distance:
+		elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.5):
 			lod1.append(query[pos].transform)
-		else:
+			i1 += 1
+		elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.75):
 			lod2.append(query[pos].transform)
+			i2 += 1
+		else:
+			lod3.append(query[pos].transform)
+			i3 =+ 1
 
 	_multi_mesh_lod0.instance_count = lod0.size()
 	_multi_mesh_lod1.instance_count = lod1.size()
 	_multi_mesh_lod2.instance_count = lod2.size()
 	_multi_mesh_lod3.instance_count = lod3.size()
 	for i in range(lod0.size()):
+		_add_collider(lod0[i])
 		_multi_mesh_lod0.set_instance_transform(i,lod0[i])
 	for i in range(lod1.size()):
 		_multi_mesh_lod1.set_instance_transform(i,lod1[i])
 	for i in range(lod2.size()):
 		_multi_mesh_lod2.set_instance_transform(i,lod2[i])
-	#for i in range(lod3.size()):
-		#_multi_mesh_lod3.set_instance_transform(i,lod3[i])
+	for i in range(lod3.size()):
+		_multi_mesh_lod3.set_instance_transform(i,lod3[i])
 
 func unload_items_outside_radius(_pos,_radius = 100.0):
 	var positions_to_unload = []
@@ -331,3 +380,6 @@ func unload_items_outside_radius(_pos,_radius = 100.0):
 		#remove_child(obj)
 		unload_queue.append(obj)
 		active_objs.erase(pos)
+
+func _add_collider(_transform : Transform3D):
+	pass
