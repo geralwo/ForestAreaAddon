@@ -32,7 +32,6 @@ class_name ForestArea
 @export var lod_curve : Curve = load("res://addons/forestarea/base_curve.tres"):
 	set(v):
 		lod_curve = v
-		_last_loading_position = Vector3.INF
 ## Shows the bounding box of the Forest
 @export var _show_aabb_preview : bool = true :
 	set(v):
@@ -42,10 +41,12 @@ class_name ForestArea
 @export_category("Debug")
 @export_group("Settings")
 @export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
-## Shows the positions of the raycasts
+## Shows the positions of the raycasts that did not hit the AABB
 @export var _view_query_data : bool = false:
 	set(v):
 		_view_query_data = v
+		if not v:
+			_show_query_data([])
 ## Visualizes the octree structure
 @export var _show_octree_structure : bool = false:
 	set(v):
@@ -56,11 +57,7 @@ class_name ForestArea
 			for c in get_children():
 				if c.is_in_group("_octree_visualize"):
 					c.queue_free()
-
-
-var lod0_distance = 100.0
-var lod1_distance = 200.0
-
+@export var _octree_corners_color : Color = Color.ALICE_BLUE
 
 var _temp_meshes : Array[MeshInstance3D]
 var _preview_mesh : MeshInstance3D = MeshInstance3D.new()
@@ -83,12 +80,12 @@ signal generation_done
 func _ready():
 	_static_body = StaticBody3D.new()
 	add_child(_static_body)
-	add_child(_preview_mesh)
-	_preview_mesh.visible = _show_aabb_preview
+	if Engine.is_editor_hint():
+		add_child(_preview_mesh)
+		_preview_mesh.visible = _show_aabb_preview
 	if ForestData:
 		if flora:
-			for i : int in range(flora.size()):
-				_multi_mesh_instances.append(_create_mm_instances(flora[i].LOD))
+			print(_create_mm_instances(flora))
 			_multi_mesh_lod0 = MultiMesh.new()
 			_multi_mesh_lod1 = MultiMesh.new()
 			_multi_mesh_lod2 = MultiMesh.new()
@@ -143,19 +140,19 @@ func _ready():
 				printerr("wrong number of lods")
 				return
 
-			prints(self.name, "has", ForestData.items_size(),"trees")
+			prints(self.name, "has", ForestData.items_size(),"items")
 			add_child(_multi_mesh_instance_lod0)
 			add_child(_multi_mesh_instance_lod1)
 			add_child(_multi_mesh_instance_lod2)
 			add_child(_multi_mesh_instance_lod3)
+
 func _process(delta):
-	if ForestData && flora.size() != 0:
-		if Engine.is_editor_hint():
-			if Engine.get_frames_drawn() % 2 != 0: # on uneven frames
-				load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-				unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+	if Engine.is_editor_hint():
+		if ForestData && flora.size() != 0:
+				if Engine.get_frames_drawn() % 2 != 0: # on uneven frames
+					load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+					unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 func _generate():
-	prints("preview_mesh",_preview_mesh.mesh.get_aabb())
 	if ForestData:
 		ForestData.clear()
 	else:
@@ -229,23 +226,29 @@ func _generate():
 
 		emit_signal("generation_done")
 
+func update(_pos,_radius):
+	if ForestData:
+		if Engine.get_frames_drawn() % 2 == 0:
+			load_items_within_radius(_pos,_radius)
+		else:
+			unload_items_outside_radius(_pos,_radius)
+
 func _show_query_data(data : Array):
+	for c in get_children():
+		if c.is_in_group("_forest_area_tmp"):
+			c.queue_free()
 	if _view_query_data:
 		for pos : Vector3 in data:
 			var x = draw_debug_box(pos,Vector3.ONE * 1,Color.TOMATO)
-			x.add_to_group("_forest_tree_tmp")
+			x.add_to_group("_forest_area_tmp")
 			x.position = to_local(pos)
 			add_child(x)
-	else:
-		for c in get_children():
-			if c.is_in_group("_forest_tree_tmp"):
-				c.queue_free()
 
 func _view_octree_structure():
 	for c in get_children():
 		if c.is_in_group("_octree_visualize"):
 			c.queue_free()
-	var nodes = ForestAreaData.visualize(ForestData)
+	var nodes = ForestAreaData.visualize(ForestData,_octree_corners_color)
 	nodes.add_to_group("_octree_visualize")
 	add_child(nodes)
 	nodes.global_transform.origin -= self.global_transform.origin
@@ -262,6 +265,7 @@ func _update_aabb_preview(force : bool = false):
 			box.surface_set_material(0, material)
 			_preview_mesh.mesh = box
 			_preview_mesh.visible = true
+			#_preview_mesh.global_transform = self.global_transform
 		else:
 			var box = BoxMesh.new()
 			box.size = _size
@@ -337,51 +341,49 @@ func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> 
 	existing_points.append(random_point)
 	return random_point
 
-var _last_loading_position = Vector3.INF
 func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
-	if _pos != _last_loading_position:
-		if _pos.distance_to(_last_loading_position) > 10.0:
-			var query = ForestData.query(_radius, _pos)
-			var lod0 = []
-			var lod1 = []
-			var lod2 = []
-			var lod3 = []
+	var query = ForestData.query(_radius, _pos)
+	var lod0 = []
+	var lod1 = []
+	var lod2 = []
+	var lod3 = []
 
-			for pos : Vector3 in query:
-				if _pos.distance_to(pos) < _radius * lod_curve.sample(0.25):
-					lod0.append(query[pos])
-				elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.5):
-					lod1.append(query[pos])
-				elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.75):
-					lod2.append(query[pos])
-				else:
-					lod3.append(query[pos])
-			_multi_mesh_lod0.instance_count = lod0.size()
-			_multi_mesh_lod1.instance_count = lod1.size()
-			_multi_mesh_lod2.instance_count = lod2.size()
-			_multi_mesh_lod3.instance_count = lod3.size()
-			for i : int in range(lod0.size()):
-				_add_collider(lod0[i].transform,lod0[i].collider_shape)
-				_multi_mesh_lod0.set_instance_transform(i,lod0[i].transform)
-			for i : int in range(lod1.size()):
-				_multi_mesh_lod1.set_instance_transform(i,lod1[i].transform)
-			for i : int in range(lod2.size()):
-				_multi_mesh_lod2.set_instance_transform(i,lod2[i].transform)
-			for i : int in range(lod3.size()):
-				_multi_mesh_lod3.set_instance_transform(i,lod3[i].transform)
-
-			_last_loading_position = _pos
+	for pos : Vector3 in query:
+		if _pos.distance_to(pos) < _radius * lod_curve.sample(0.25):
+			lod0.append(query[pos])
+		elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.5):
+			lod1.append(query[pos])
+		elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.75):
+			lod2.append(query[pos])
+		else:
+			lod3.append(query[pos])
+	_multi_mesh_lod0.instance_count = lod0.size()
+	_multi_mesh_lod1.instance_count = lod1.size()
+	_multi_mesh_lod2.instance_count = lod2.size()
+	_multi_mesh_lod3.instance_count = lod3.size()
+	for i : int in range(lod0.size()):
+		_add_collider(lod0[i].transform,lod0[i].collider_shape)
+		_multi_mesh_lod0.set_instance_transform(i,lod0[i].transform)
+	for i : int in range(lod1.size()):
+		_multi_mesh_lod1.set_instance_transform(i,lod1[i].transform)
+	for i : int in range(lod2.size()):
+		_multi_mesh_lod2.set_instance_transform(i,lod2[i].transform)
+	for i : int in range(lod3.size()):
+		_multi_mesh_lod3.set_instance_transform(i,lod3[i].transform)
 
 
 var _colliders : Dictionary = {}
 func unload_items_outside_radius(_pos,_radius = 100.0):
 	var positions_to_unload = []
 	for pos in _colliders.keys():
-		if pos.origin.distance_to(_pos) > _radius:
+		if pos.origin.distance_to(_pos) > _radius * lod_curve.sample(0.5):
 			positions_to_unload.append(pos)
+	if positions_to_unload.size() == 0:
+		return
 	for pos in positions_to_unload:
 		var obj = _colliders[pos]
 		obj.queue_free()
+		_colliders.erase(pos)
 
 func _add_collider(_transform : Transform3D, _shape : Shape3D):
 	if Engine.get_frames_drawn() % 2 == 0:
@@ -392,15 +394,18 @@ func _add_collider(_transform : Transform3D, _shape : Shape3D):
 			_colliders[_transform] = collider
 			_static_body.add_child(_colliders[_transform])
 
-func _create_mm_instances(meshes : Array) -> Array:
+func _create_mm_instances(data : Array) -> Array:
 	var instances = []
-	for i : int in range(meshes.size()):
-		var _multi_mesh_instance = MultiMeshInstance3D.new()
-		var _multi_mesh = MultiMesh.new()
-		_multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
-		_multi_mesh.mesh = meshes[i]
-		_multi_mesh_instance.multimesh = _multi_mesh
-		instances.append(_multi_mesh_instance)
+	for i : int in range(data.size()):
+		for j : int in range(data[i].LOD.size()):
+			var _multi_mesh_instance = MultiMeshInstance3D.new()
+			_multi_mesh_instance.name = "%sLOD%s" % [i, j]
+			print(_multi_mesh_instance.name)
+			var _multi_mesh = MultiMesh.new()
+			_multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
+			_multi_mesh.mesh = data[i].LOD[j]
+			_multi_mesh_instance.multimesh = _multi_mesh
+			instances.append(_multi_mesh_instance)
 	return instances
 
 func rotated_aabb(aabb : AABB, _rotation_degrees):
@@ -411,4 +416,18 @@ func rotated_aabb(aabb : AABB, _rotation_degrees):
 		return new_aabb
 	for i in range(8):
 		corners.append(aabb.get_endpoint(i))
+
+	var s = sin(deg_to_rad(_rotation_degrees))
+	var c = cos(deg_to_rad(_rotation_degrees))
+
+	for corner in corners:
+		var x1 = corner.x - center.x
+		var z1 = corner.z - center.z
+
+		var x2 = x1 * c - z1 * s
+		var z2 = x1 * s - z1 * c
+		print(corner)
+		corner.x = x2 + corner.x
+		corner.z = z2 + corner.z
+		print(corner)
 	return new_aabb
