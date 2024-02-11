@@ -43,7 +43,9 @@ class_name ForestArea
 @export_group("Settings")
 @export var _aabb_color : Color = Color(Color.WEB_GREEN,0.3)
 ## Shows the positions of the raycasts
-@export var _view_query_data : bool = false
+@export var _view_query_data : bool = false:
+	set(v):
+		_view_query_data = v
 ## Visualizes the octree structure
 @export var _show_octree_structure : bool = false:
 	set(v):
@@ -165,7 +167,7 @@ func _generate():
 		_update_aabb_preview(true)
 		ForestData = ForestAreaData.new(self.global_transform.origin - _size / 2,_size)
 		prints("ForestData aabb",ForestData.aabb,self.global_transform.origin,_preview_mesh.mesh.get_aabb())
-		ForestData.aabb = rotate_aabb(ForestData.aabb,rotation_degrees.y)
+		#ForestData.aabb = rotated_aabb(ForestData.aabb,rotation_degrees.y)
 		var denied_positions = []
 		var result_positions = []
 		# Clear existing trees
@@ -181,13 +183,6 @@ func _generate():
 			var query_start = to_global(random_position)
 			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
 
-			var hit_s = draw_debug_box(query_start,Vector3.ONE * 5,Color(Color.HOT_PINK,0.15))
-			var hit_e = draw_debug_box(query_end,Vector3.ONE * 5,Color(Color.LIME_GREEN,0.15))
-			hit_s.position = to_local(query_start)
-			hit_e.position = to_local(query_end)
-			_temp_meshes.append(hit_s)
-			_temp_meshes.append(hit_e)
-
 			var query = PhysicsRayQueryParameters3D.create(query_start,query_end) # global coords
 			var result = space_state.intersect_ray(query) # global coords
 
@@ -201,6 +196,7 @@ func _generate():
 					result_positions.append(result.position)
 
 		for pos : Vector3 in result_positions:
+			var instance_transform = Transform3D.IDENTITY
 			var scene_id = randi() % flora.size()
 			var tree_scale_x = randf_range(flora[scene_id].scale_min.x, flora[scene_id].scale_max.x)
 			var tree_scale_y = randf_range(flora[scene_id].scale_min.y, flora[scene_id].scale_max.y)
@@ -208,10 +204,14 @@ func _generate():
 			var _scale = Vector3(tree_scale_x, tree_scale_y, tree_scale_z)
 
 			var _basis = Basis()
-			_basis = _basis.rotated(Vector3.UP, randf() * 2 * PI)  # Rotate around Y-axis
 			_basis = _basis.scaled(_scale)  # Apply scaling
+			_basis = _basis.rotated(Vector3.UP, randf() * 2 * PI)  # Rotate around Y-axis
+			#_basis.y.y = randf() * 2 * PI
 
-			var instance_transform = Transform3D(_basis, to_local(pos))
+
+			#var instance_transform = Transform3D(_basis, to_local(pos))
+			instance_transform.origin = to_local(pos)
+			instance_transform.basis = _basis
 			var data = {
 				"index": scene_id,
 				"scale": _scale,
@@ -231,9 +231,8 @@ func _generate():
 
 func _show_query_data(data : Array):
 	if _view_query_data:
-		print(ForestData.aabb)
 		for pos : Vector3 in data:
-			var x = draw_debug_box(pos,Vector3.ONE * 5,Color.TOMATO)
+			var x = draw_debug_box(pos,Vector3.ONE * 1,Color.TOMATO)
 			x.add_to_group("_forest_tree_tmp")
 			x.position = to_local(pos)
 			add_child(x)
@@ -404,34 +403,12 @@ func _create_mm_instances(meshes : Array) -> Array:
 		instances.append(_multi_mesh_instance)
 	return instances
 
-func rotate_aabb(aabb : AABB, _rotation_degrees):
+func rotated_aabb(aabb : AABB, _rotation_degrees):
 	var center = aabb.get_center()
-
-	# Compute the corner points of the AABB
-	var half_extents = aabb.size / 2
 	var corners = []
-
+	var new_aabb = aabb
+	if _rotation_degrees == 0.0:
+		return new_aabb
 	for i in range(8):
 		corners.append(aabb.get_endpoint(i))
-		print(aabb.get_endpoint(i))
-	# Apply rotation transformation to each corner point
-	var rotated_corners = []
-	var _rotation = Basis().rotated(Vector3.UP,deg_to_rad(_rotation_degrees))
-	for corner in corners:
-		rotated_corners.append(_rotation * (corner - center) + center)
-
-	# Compute the new AABB
-	var min_point = Vector3.INF
-	var max_point = Vector3(-INF,-INF,-INF)
-	for corner in rotated_corners:
-		print(corner)
-		min_point.x = min(min_point.x, corner.x)
-		min_point.y = min(min_point.y, corner.y)
-		min_point.z = min(min_point.z, corner.z)
-
-		max_point.x = max(max_point.x, corner.x)
-		max_point.y = max(max_point.y, corner.y)
-		max_point.z = max(max_point.z, corner.z)
-	prints(min_point,max_point)
-	var new_aabb = AABB(min_point, max_point - min_point)
 	return new_aabb

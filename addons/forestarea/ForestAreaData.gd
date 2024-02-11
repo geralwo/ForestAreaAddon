@@ -108,34 +108,34 @@ static func visualize_node(aabb: AABB, children: Array) -> Node3D:
 	for i in range(1,8):
 		var minst = MeshInstance3D.new()
 		minst.top_level = true
-		minst.global_transform.origin = aabb.get_endpoint(i)
+		minst.position = aabb.get_endpoint(i)
 		var mesh = BoxMesh.new()
-		mesh.size = Vector3(3,3,3)
+		mesh.size = Vector3(1,1,1)
 
 		var material = StandardMaterial3D.new()
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.albedo_color = Color.BROWN
+		material.albedo_color = Color.ALICE_BLUE
 		material.flags_unshaded = true
 		mesh.surface_set_material(0, material)
 
 		minst.mesh = mesh
 		all.add_child(minst)
-	var node = MeshInstance3D.new()
-	node.add_to_group("_octree_visualize")
-	node.position = aabb.get_center()
-
-	var box_mesh = BoxMesh.new()
-	box_mesh.size = aabb.size
-
-	var material = StandardMaterial3D.new()
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(randf(), randf(), randf(), 0.05)
-	material.flags_unshaded = true
-
-	box_mesh.surface_set_material(0, material)
-
-	node.mesh = box_mesh
-	all.add_child(node)
+	#var node = MeshInstance3D.new()
+	#node.add_to_group("_octree_visualize")
+	#node.position = aabb.get_center()
+#
+	#var box_mesh = BoxMesh.new()
+	#box_mesh.size = aabb.size
+#
+	#var material = StandardMaterial3D.new()
+	#material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	#material.albedo_color = Color(randf(), randf(), randf(), 0.05)
+	#material.flags_unshaded = true
+#
+	#box_mesh.surface_set_material(0, material)
+#
+	#node.mesh = box_mesh
+	#all.add_child(node)
 
 	for child in children:
 		var childNode = visualize_node(child.aabb, child.children)
