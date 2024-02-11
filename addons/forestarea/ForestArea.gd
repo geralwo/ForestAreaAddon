@@ -28,17 +28,16 @@ class_name ForestArea
 @export var ForestData : ForestAreaData
 ## Sets the editor render distance
 @export var editor_render_distance : float = 1000.0
+## Defines when each LOD gets shown
+@export var lod_curve : Curve = load("res://addons/forestarea/base_curve.tres"):
+	set(v):
+		lod_curve = v
+		_last_loading_position = Vector3.INF
 ## Shows the bounding box of the Forest
 @export var _show_aabb_preview : bool = true :
 	set(v):
 		_show_aabb_preview = v
 		_update_aabb_preview()
-@export var lod_curve : Curve = load("res://addons/forestarea/base_curve.tres"):
-	set(v):
-		lod_curve = v
-		_last_loading_position = Vector3.INF
-
-var min_tree_distance = 10.0
 
 @export_category("Debug")
 @export_group("Settings")
@@ -154,7 +153,7 @@ func _process(delta):
 				load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 				unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 func _generate():
-	print(_preview_mesh.mesh.get_aabb())
+	prints("preview_mesh",_preview_mesh.mesh.get_aabb())
 	if ForestData:
 		ForestData.clear()
 	else:
@@ -164,8 +163,9 @@ func _generate():
 	existing_points.clear()
 	if is_inside_tree():
 		_update_aabb_preview(true)
-		print(_preview_mesh.mesh.get_aabb())
-		ForestData = ForestAreaData.new(self.global_transform.origin - _preview_mesh.mesh.get_aabb().size / 2,_size)
+		ForestData = ForestAreaData.new(self.global_transform.origin - _size / 2,_size)
+		prints("ForestData aabb",ForestData.aabb,self.global_transform.origin,_preview_mesh.mesh.get_aabb())
+		ForestData.aabb = rotate_aabb(ForestData.aabb,rotation_degrees.y)
 		var denied_positions = []
 		var result_positions = []
 		# Clear existing trees
@@ -198,19 +198,20 @@ func _generate():
 				var angle_deg = rad_to_deg(angle_rad)
 
 				if angle_deg < max_slope:
-					var hit = draw_debug_box(result.position,Vector3.ONE * 5,Color(Color.SKY_BLUE,0.95))
 					result_positions.append(result.position)
-					hit.position = to_local(result.position)
-					_temp_meshes.append(hit)
+
 		for pos : Vector3 in result_positions:
 			var scene_id = randi() % flora.size()
-			var _basis = Basis().rotated(Vector3.UP,randf())
-			var tree_scale_x = randf_range(flora[scene_id].scale_min.x,flora[scene_id].scale_max.x)
-			var tree_scale_y = randf_range(flora[scene_id].scale_min.y,flora[scene_id].scale_max.y)
-			var tree_scale_z = randf_range(flora[scene_id].scale_min.z,flora[scene_id].scale_max.z)
-			var _scale = Vector3(tree_scale_x,tree_scale_y,tree_scale_z)
-			_basis = _basis.scaled(_scale)
-			var instance_transform = Transform3D(_basis,to_local(pos))
+			var tree_scale_x = randf_range(flora[scene_id].scale_min.x, flora[scene_id].scale_max.x)
+			var tree_scale_y = randf_range(flora[scene_id].scale_min.y, flora[scene_id].scale_max.y)
+			var tree_scale_z = randf_range(flora[scene_id].scale_min.z, flora[scene_id].scale_max.z)
+			var _scale = Vector3(tree_scale_x, tree_scale_y, tree_scale_z)
+
+			var _basis = Basis()
+			_basis = _basis.rotated(Vector3.UP, randf() * 2 * PI)  # Rotate around Y-axis
+			_basis = _basis.scaled(_scale)  # Apply scaling
+
+			var instance_transform = Transform3D(_basis, to_local(pos))
 			var data = {
 				"index": scene_id,
 				"scale": _scale,
@@ -230,6 +231,7 @@ func _generate():
 
 func _show_query_data(data : Array):
 	if _view_query_data:
+		print(ForestData.aabb)
 		for pos : Vector3 in data:
 			var x = draw_debug_box(pos,Vector3.ONE * 5,Color.TOMATO)
 			x.add_to_group("_forest_tree_tmp")
@@ -246,8 +248,8 @@ func _view_octree_structure():
 			c.queue_free()
 	var nodes = ForestAreaData.visualize(ForestData)
 	nodes.add_to_group("_octree_visualize")
-	nodes.global_transform.origin -= self.global_transform.origin
 	add_child(nodes)
+	nodes.global_transform.origin -= self.global_transform.origin
 
 func _update_aabb_preview(force : bool = false):
 	if _show_aabb_preview or force:
@@ -401,3 +403,35 @@ func _create_mm_instances(meshes : Array) -> Array:
 		_multi_mesh_instance.multimesh = _multi_mesh
 		instances.append(_multi_mesh_instance)
 	return instances
+
+func rotate_aabb(aabb : AABB, _rotation_degrees):
+	var center = aabb.get_center()
+
+	# Compute the corner points of the AABB
+	var half_extents = aabb.size / 2
+	var corners = []
+
+	for i in range(8):
+		corners.append(aabb.get_endpoint(i))
+		print(aabb.get_endpoint(i))
+	# Apply rotation transformation to each corner point
+	var rotated_corners = []
+	var _rotation = Basis().rotated(Vector3.UP,deg_to_rad(_rotation_degrees))
+	for corner in corners:
+		rotated_corners.append(_rotation * (corner - center) + center)
+
+	# Compute the new AABB
+	var min_point = Vector3.INF
+	var max_point = Vector3(-INF,-INF,-INF)
+	for corner in rotated_corners:
+		print(corner)
+		min_point.x = min(min_point.x, corner.x)
+		min_point.y = min(min_point.y, corner.y)
+		min_point.z = min(min_point.z, corner.z)
+
+		max_point.x = max(max_point.x, corner.x)
+		max_point.y = max(max_point.y, corner.y)
+		max_point.z = max(max_point.z, corner.z)
+	prints(min_point,max_point)
+	var new_aabb = AABB(min_point, max_point - min_point)
+	return new_aabb

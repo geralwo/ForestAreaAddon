@@ -110,7 +110,7 @@ static func visualize_node(aabb: AABB, children: Array) -> Node3D:
 		minst.top_level = true
 		minst.global_transform.origin = aabb.get_endpoint(i)
 		var mesh = BoxMesh.new()
-		mesh.size = Vector3(10,i,10)
+		mesh.size = Vector3(3,3,3)
 
 		var material = StandardMaterial3D.new()
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -129,7 +129,7 @@ static func visualize_node(aabb: AABB, children: Array) -> Node3D:
 
 	var material = StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color = Color(randf(), randf(), randf(), 0.25)
+	material.albedo_color = Color(randf(), randf(), randf(), 0.05)
 	material.flags_unshaded = true
 
 	box_mesh.surface_set_material(0, material)
