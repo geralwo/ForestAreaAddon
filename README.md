@@ -8,5 +8,6 @@ Tested in Godot 4.2.1
 
 ## Todo
 - Unload colliders
-- Implement AreaTrigger system
+- Implement AreaTrigger system to interact with trees
 - Implement system to instantiate scenes around the tree
+- Implement grass and other details
