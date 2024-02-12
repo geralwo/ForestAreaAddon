@@ -85,66 +85,11 @@ func _ready():
 		_preview_mesh.visible = _show_aabb_preview
 	if ForestData:
 		if flora:
-			print(_create_mm_instances(flora))
-			_multi_mesh_lod0 = MultiMesh.new()
-			_multi_mesh_lod1 = MultiMesh.new()
-			_multi_mesh_lod2 = MultiMesh.new()
-			_multi_mesh_lod3 = MultiMesh.new()
-			_multi_mesh_lod0.transform_format = MultiMesh.TRANSFORM_3D
-			_multi_mesh_lod1.transform_format = MultiMesh.TRANSFORM_3D
-			_multi_mesh_lod2.transform_format = MultiMesh.TRANSFORM_3D
-			_multi_mesh_lod3.transform_format = MultiMesh.TRANSFORM_3D
-
-			_multi_mesh_instance_lod0 = MultiMeshInstance3D.new()
-			_multi_mesh_instance_lod1 = MultiMeshInstance3D.new()
-			_multi_mesh_instance_lod2 = MultiMeshInstance3D.new()
-			_multi_mesh_instance_lod3 = MultiMeshInstance3D.new()
-
-			if flora[0].LOD.size() == 1:
-				_multi_mesh_lod0.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
-				_multi_mesh_lod1.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod0
-				_multi_mesh_lod2.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod0
-				_multi_mesh_lod3.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod0
-			elif flora[0].LOD.size() == 2:
-				_multi_mesh_lod0.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
-				_multi_mesh_lod1.mesh = flora[0].LOD[1]
-				_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
-				_multi_mesh_lod2.mesh = flora[0].LOD[1]
-				_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod1
-				_multi_mesh_lod3.mesh = flora[0].LOD[1]
-				_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod1
-			elif flora[0].LOD.size() == 3:
-				_multi_mesh_lod0.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
-				_multi_mesh_lod1.mesh = flora[0].LOD[1]
-				_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
-				_multi_mesh_lod2.mesh = flora[0].LOD[2]
-				_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod2
-				_multi_mesh_lod3.mesh = flora[0].LOD[2]
-				_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod2
-			elif flora[0].LOD.size() == 4:
-				_multi_mesh_lod0.mesh = flora[0].LOD[0]
-				_multi_mesh_instance_lod0.multimesh = _multi_mesh_lod0
-				_multi_mesh_lod1.mesh = flora[0].LOD[1]
-				_multi_mesh_instance_lod1.multimesh = _multi_mesh_lod1
-				_multi_mesh_lod2.mesh = flora[0].LOD[2]
-				_multi_mesh_instance_lod2.multimesh = _multi_mesh_lod2
-				_multi_mesh_lod3.mesh = flora[0].LOD[3]
-				_multi_mesh_instance_lod3.multimesh = _multi_mesh_lod3
-			else:
-				printerr("wrong number of lods")
-				return
-
+			_multi_mesh_instances = _create_mm_instances(flora)
 			prints(self.name, "has", ForestData.items_size(),"items")
-			add_child(_multi_mesh_instance_lod0)
-			add_child(_multi_mesh_instance_lod1)
-			add_child(_multi_mesh_instance_lod2)
-			add_child(_multi_mesh_instance_lod3)
+			for group in _multi_mesh_instances:
+				for lod in group:
+					add_child(lod)
 
 func _process(delta):
 	if Engine.is_editor_hint():
@@ -343,34 +288,31 @@ func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> 
 
 func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 	var query = ForestData.query(_radius, _pos)
-	var lod0 = []
-	var lod1 = []
-	var lod2 = []
-	var lod3 = []
+	# go through each group of mm instances
+	for group_index : int in range(_multi_mesh_instances.size()):
+		for lod_index in range(_multi_mesh_instances[group_index].size()):
 
-	for pos : Vector3 in query:
-		if _pos.distance_to(pos) < _radius * lod_curve.sample(0.25):
-			lod0.append(query[pos])
-		elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.5):
-			lod1.append(query[pos])
-		elif _pos.distance_to(pos) < _radius * lod_curve.sample(0.75):
-			lod2.append(query[pos])
-		else:
-			lod3.append(query[pos])
-	_multi_mesh_lod0.instance_count = lod0.size()
-	_multi_mesh_lod1.instance_count = lod1.size()
-	_multi_mesh_lod2.instance_count = lod2.size()
-	_multi_mesh_lod3.instance_count = lod3.size()
-	for i : int in range(lod0.size()):
-		_add_collider(lod0[i].transform,lod0[i].collider_shape)
-		_multi_mesh_lod0.set_instance_transform(i,lod0[i].transform)
-	for i : int in range(lod1.size()):
-		_multi_mesh_lod1.set_instance_transform(i,lod1[i].transform)
-	for i : int in range(lod2.size()):
-		_multi_mesh_lod2.set_instance_transform(i,lod2[i].transform)
-	for i : int in range(lod3.size()):
-		_multi_mesh_lod3.set_instance_transform(i,lod3[i].transform)
+			var _instance_count = 0
+			var _position = []
+			for pos : Vector3 in query:
+				var distance = _pos.distance_to(pos)
+				var x_coord = float(lod_index) / (_multi_mesh_instances[group_index].size() - 1)
+				var lod_sample = lod_curve.sample(x_coord)
+				#print(x_coord)
+				#print(float(lod_index) / (_multi_mesh_instances[group_index].size() - 1))
+				if distance < _radius * lod_sample:
+					_instance_count += 1
+					_position.append(query[pos])
 
+			_multi_mesh_instances[group_index][lod_index].multimesh.instance_count = _instance_count
+			# FIXME: This is wrong
+			if not _position.size() == 0:
+				_multi_mesh_instances[group_index][lod_index].multimesh.mesh = _position[0].meshes[lod_index]
+			#print(_position)
+
+			for i in range(_position.size()):
+				_multi_mesh_instances[group_index][lod_index].multimesh.set_instance_transform(i,_position[i].transform)
+			_position.clear()
 
 var _colliders : Dictionary = {}
 func unload_items_outside_radius(_pos,_radius = 100.0):
@@ -395,9 +337,10 @@ func _add_collider(_transform : Transform3D, _shape : Shape3D):
 			_static_body.add_child(_colliders[_transform])
 
 func _create_mm_instances(data : Array) -> Array:
-	var instances = []
-	for i : int in range(data.size()):
-		for j : int in range(data[i].LOD.size()):
+	var instances : Array = []
+	for i : int in range(data.size()): # for each model in data
+		var group = []
+		for j : int in range(data[i].LOD.size()): # for each lod model in data[i] we create a MultimeshInstance3D
 			var _multi_mesh_instance = MultiMeshInstance3D.new()
 			_multi_mesh_instance.name = "%sLOD%s" % [i, j]
 			print(_multi_mesh_instance.name)
@@ -405,7 +348,8 @@ func _create_mm_instances(data : Array) -> Array:
 			_multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
 			_multi_mesh.mesh = data[i].LOD[j]
 			_multi_mesh_instance.multimesh = _multi_mesh
-			instances.append(_multi_mesh_instance)
+			group.append(_multi_mesh_instance)
+		instances.append(group)
 	return instances
 
 func rotated_aabb(aabb : AABB, _rotation_degrees):
