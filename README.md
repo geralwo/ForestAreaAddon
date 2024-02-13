@@ -7,6 +7,7 @@ Let's you place scenes on the ground in a given area
 Tested in Godot 4.2.1
 
 ## Todo
-- Implement AreaTrigger system to interact with trees
-- Implement system to instantiate scenes around the tree
+- Implement Interaction system to interact with items
+- Implement system to instantiate scenes around the item
 - Implement grass and other details
+- Implement texture lookup
