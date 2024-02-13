@@ -1,5 +1,4 @@
-![grafik](https://github.com/geralwo/ForestAreaAddon/assets/89428719/c6f0936b-b46b-49a3-8a8f-f910d18c801c)
-
+![grafik](https://github.com/geralwo/ForestAreaAddon/assets/89428719/12cede1e-6df1-469c-894c-d549e060f8a3)
 
 
 Let's you place scenes on the ground in a given area
