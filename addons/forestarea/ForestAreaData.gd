@@ -49,7 +49,6 @@ func insert(item_position: Vector3, data: Dictionary) -> bool:
 			return true
 	return false
 
-
 func subdivide() -> void:
 	var child_half_dim = aabb.size / 4  # Use aabb.size / 4 instead of aabb.size / 2
 
@@ -63,9 +62,12 @@ func subdivide() -> void:
 		var child_position = aabb.position + offset + child_half_dim
 		children.append(ForestAreaData.new(child_position, child_half_dim * 2))
 
-
-
-
+func get_item(_position):
+	if items.has(_position):
+		return items[_position]
+	for child in children:
+		if child.get_item(_position):
+			return child.items[_position]
 
 func query(radius: float, position: Vector3) -> Dictionary:
 	var items_within_radius = {}
@@ -100,10 +102,10 @@ func intersects_sphere(center: Vector3, radius: float) -> bool:
 
 	return squared_distance <= pow(radius, 2)
 
-static func visualize(data: ForestAreaData) -> Node3D:
-	return visualize_node(data.aabb, data.children)
+static func visualize(data: ForestAreaData, color : Color = Color.ALICE_BLUE) -> Node3D:
+	return visualize_node(data.aabb, data.children, color)
 
-static func visualize_node(aabb: AABB, children: Array) -> Node3D:
+static func visualize_node(aabb: AABB, children: Array, color:Color = Color.ALICE_BLUE) -> Node3D:
 	var all = Node3D.new()
 	for i in range(1,8):
 		var minst = MeshInstance3D.new()
@@ -114,31 +116,15 @@ static func visualize_node(aabb: AABB, children: Array) -> Node3D:
 
 		var material = StandardMaterial3D.new()
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.albedo_color = Color.ALICE_BLUE
+		material.albedo_color = color
 		material.flags_unshaded = true
 		mesh.surface_set_material(0, material)
 
 		minst.mesh = mesh
 		all.add_child(minst)
-	#var node = MeshInstance3D.new()
-	#node.add_to_group("_octree_visualize")
-	#node.position = aabb.get_center()
-#
-	#var box_mesh = BoxMesh.new()
-	#box_mesh.size = aabb.size
-#
-	#var material = StandardMaterial3D.new()
-	#material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	#material.albedo_color = Color(randf(), randf(), randf(), 0.05)
-	#material.flags_unshaded = true
-#
-	#box_mesh.surface_set_material(0, material)
-#
-	#node.mesh = box_mesh
-	#all.add_child(node)
 
 	for child in children:
-		var childNode = visualize_node(child.aabb, child.children)
+		var childNode = visualize_node(child.aabb, child.children, color)
 		all.add_child(childNode)
 
 	return all
