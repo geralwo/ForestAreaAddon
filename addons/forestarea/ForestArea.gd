@@ -289,43 +289,41 @@ func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 	# go through each group of mm instances
 	var used_pos = []
 	for group_index : int in range(_multi_mesh_instances.size()):
+		var lod_distances = []
+		var x_coord_fraction = 1.0 / (_multi_mesh_instances[group_index].size() - 1)
+		for i in range(_multi_mesh_instances[group_index].size()):
+			var lod_sample = lod_curve.sample(x_coord_fraction * i)
+			var distance = _radius * lod_sample
+			lod_distances.append(lod_sample)
 		for lod_index in range(_multi_mesh_instances[group_index].size()):
 			var _instance_count = 0
 			var _position = []
-			var x_coord_fraction = 1.0 / (_multi_mesh_instances[group_index].size() - 1)
 			var _prev_lod_level : float = 0
-
-			var lod_distances = []
-			for i in range(_multi_mesh_instances[group_index].size()):
-				var lod_sample = lod_curve.sample(x_coord_fraction * i)
-				var distance = _radius * lod_sample
-				lod_distances.append(lod_sample)
 			#print(lod_distances)
 			for pos : Vector3 in query:
 				var distance = _pos.distance_to(pos)
 				if lod_index == 0:
 					if distance < lod_distances[lod_index]:
+						_add_collider(query[pos].transform,query[pos].collider_shape)
 						_instance_count += 1
 						_position.append(query[pos])
 				else:
 					if distance < lod_distances[lod_index] and not distance > lod_distances[lod_index] and distance > lod_distances[lod_index - 1]:
 						_instance_count += 1
 						_position.append(query[pos])
-
 			_multi_mesh_instances[group_index][lod_index].multimesh.instance_count = _instance_count
 
 			if _position.size() > 0:
 				_multi_mesh_instances[group_index][lod_index].multimesh.mesh = _position[0].meshes[lod_index]
 				for i in range(_position.size()):
 					_multi_mesh_instances[group_index][lod_index].multimesh.set_instance_transform(i,_position[i].transform)
-			#print(lod_distances)
 			_position.clear()
 
 var _colliders : Dictionary = {}
 func unload_items_outside_radius(_pos,_radius = 100.0):
 	var positions_to_unload = []
 	for pos in _colliders.keys():
-		if pos.origin.distance_to(_pos) > _radius * lod_curve.sample(0.5):
+		if pos.origin.distance_to(_pos) > _radius * lod_curve.sample(0):
 			positions_to_unload.append(pos)
 	if positions_to_unload.size() == 0:
 		return
@@ -335,6 +333,7 @@ func unload_items_outside_radius(_pos,_radius = 100.0):
 		_colliders.erase(pos)
 
 func _add_collider(_transform : Transform3D, _shape : Shape3D):
+	# unload colliders in unload_items_outside_radius()
 	if Engine.get_frames_drawn() % 2 == 0:
 		if not _colliders.has(_transform):
 			var collider = CollisionShape3D.new()
