@@ -138,10 +138,15 @@ func _generate():
 		for pos : Vector3 in result_positions:
 			var instance_transform = Transform3D.IDENTITY
 			var scene_id = randi() % flora.size()
-			var tree_scale_x = randf_range(flora[scene_id].scale_min.x, flora[scene_id].scale_max.x)
-			var tree_scale_y = randf_range(flora[scene_id].scale_min.y, flora[scene_id].scale_max.y)
-			var tree_scale_z = randf_range(flora[scene_id].scale_min.z, flora[scene_id].scale_max.z)
-			var _scale = Vector3(tree_scale_x, tree_scale_y, tree_scale_z)
+			var _scale
+			if flora[scene_id].scale_uniformly:
+				var _uscale = randf_range(flora[scene_id].scale_min.x, flora[scene_id].scale_max.x)
+				_scale = Vector3(_uscale,_uscale,_uscale)
+			else:
+				var tree_scale_x = randf_range(flora[scene_id].scale_min.x, flora[scene_id].scale_max.x)
+				var tree_scale_y = randf_range(flora[scene_id].scale_min.y, flora[scene_id].scale_max.y)
+				var tree_scale_z = randf_range(flora[scene_id].scale_min.z, flora[scene_id].scale_max.z)
+				_scale = Vector3(tree_scale_x, tree_scale_y, tree_scale_z)
 
 			var _basis = Basis()
 			_basis = _basis.scaled(_scale)  # Apply scaling
