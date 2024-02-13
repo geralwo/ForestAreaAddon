@@ -94,9 +94,7 @@ func _ready():
 func _process(delta):
 	if Engine.is_editor_hint():
 		if ForestData && flora.size() != 0:
-				if Engine.get_frames_drawn() % 2 != 0: # on uneven frames
-					load_items_within_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
-					unload_items_outside_radius(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
+			update(EditorInterface.get_editor_viewport_3d().get_camera_3d().position,editor_render_distance)
 func _generate():
 	if ForestData:
 		ForestData.clear()
@@ -289,29 +287,38 @@ func generate_unique_random_point(aabb: AABB, min_distance_threshold: float) -> 
 func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 	var query = ForestData.query(_radius, _pos)
 	# go through each group of mm instances
+	var used_pos = []
 	for group_index : int in range(_multi_mesh_instances.size()):
 		for lod_index in range(_multi_mesh_instances[group_index].size()):
-
 			var _instance_count = 0
 			var _position = []
+			var x_coord_fraction = 1.0 / (_multi_mesh_instances[group_index].size() - 1)
+			var _prev_lod_level : float = 0
+
+			var lod_distances = []
+			for i in range(_multi_mesh_instances[group_index].size()):
+				var lod_sample = lod_curve.sample(x_coord_fraction * i)
+				var distance = _radius * lod_sample
+				lod_distances.append(lod_sample)
+			#print(lod_distances)
 			for pos : Vector3 in query:
 				var distance = _pos.distance_to(pos)
-				var x_coord = float(lod_index) / (_multi_mesh_instances[group_index].size() - 1)
-				var lod_sample = lod_curve.sample(x_coord)
-				#print(x_coord)
-				#print(float(lod_index) / (_multi_mesh_instances[group_index].size() - 1))
-				if distance < _radius * lod_sample:
-					_instance_count += 1
-					_position.append(query[pos])
+				if lod_index == 0:
+					if distance < lod_distances[lod_index]:
+						_instance_count += 1
+						_position.append(query[pos])
+				else:
+					if distance < lod_distances[lod_index] and not distance > lod_distances[lod_index] and distance > lod_distances[lod_index - 1]:
+						_instance_count += 1
+						_position.append(query[pos])
 
 			_multi_mesh_instances[group_index][lod_index].multimesh.instance_count = _instance_count
-			# FIXME: This is wrong
-			if not _position.size() == 0:
-				_multi_mesh_instances[group_index][lod_index].multimesh.mesh = _position[0].meshes[lod_index]
-			#print(_position)
 
-			for i in range(_position.size()):
-				_multi_mesh_instances[group_index][lod_index].multimesh.set_instance_transform(i,_position[i].transform)
+			if _position.size() > 0:
+				_multi_mesh_instances[group_index][lod_index].multimesh.mesh = _position[0].meshes[lod_index]
+				for i in range(_position.size()):
+					_multi_mesh_instances[group_index][lod_index].multimesh.set_instance_transform(i,_position[i].transform)
+			#print(lod_distances)
 			_position.clear()
 
 var _colliders : Dictionary = {}
@@ -342,7 +349,7 @@ func _create_mm_instances(data : Array) -> Array:
 		var group = []
 		for j : int in range(data[i].LOD.size()): # for each lod model in data[i] we create a MultimeshInstance3D
 			var _multi_mesh_instance = MultiMeshInstance3D.new()
-			_multi_mesh_instance.name = "%sLOD%s" % [i, j]
+			_multi_mesh_instance.name = "%s_%s_%s" % [i, data[i].name ,j]
 			print(_multi_mesh_instance.name)
 			var _multi_mesh = MultiMesh.new()
 			_multi_mesh.transform_format = MultiMesh.TRANSFORM_3D
