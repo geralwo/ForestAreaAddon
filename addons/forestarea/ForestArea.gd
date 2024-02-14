@@ -84,7 +84,7 @@ func _ready():
 		add_child(_preview_mesh)
 		_preview_mesh.visible = _show_aabb_preview
 	if ForestData:
-		if flora:
+		if flora.size() > 0:
 			_multi_mesh_instances = _create_mm_instances(flora)
 			prints(self.name, "has", ForestData.items_size(),"items")
 			for group in _multi_mesh_instances:
@@ -104,10 +104,9 @@ func _generate():
 		ForestData = ForestAreaData.new()
 	existing_points.clear()
 	if is_inside_tree():
-		_update_aabb_preview(true)
 		ForestData = ForestAreaData.new(self.global_transform.origin - _size / 2,_size)
-		prints("ForestData aabb",ForestData.aabb,self.global_transform.origin,_preview_mesh.mesh.get_aabb())
-		#ForestData.aabb = rotated_aabb(ForestData.aabb,rotation_degrees.y)
+		ForestData.aabb = rotated_aabb(ForestData.aabb,self.rotation.y)
+		#prints(rotated_aabb(ForestData.aabb,self.rotation.y),self.rotation.y)
 		var denied_positions = []
 		var result_positions = []
 		# Clear existing trees
@@ -119,7 +118,7 @@ func _generate():
 		var _generated_trees = 0
 		var _error = 0
 		for i : int in range(max_tree_count):
-			var random_position = random_point_in_aabb(ForestData.aabb)
+			var random_position = random_point_in_aabb(AABB(self.global_transform.origin - _size / 2,_size)) #(ForestData.aabb)
 			var query_start = to_global(random_position)
 			var query_end = to_global(random_position + Vector3(0,-ForestData.aabb.size.y,0))
 
@@ -138,7 +137,7 @@ func _generate():
 		for pos : Vector3 in result_positions:
 			var instance_transform = Transform3D.IDENTITY
 			var scene_id = randi() % flora.size()
-			var _scale
+			var _scale : Vector3
 			if flora[scene_id].scale_uniformly:
 				var _uscale = randf_range(flora[scene_id].scale_min.x, flora[scene_id].scale_max.x)
 				_scale = Vector3(_uscale,_uscale,_uscale)
@@ -151,10 +150,6 @@ func _generate():
 			var _basis = Basis()
 			_basis = _basis.scaled(_scale)  # Apply scaling
 			_basis = _basis.rotated(Vector3.UP, randf() * 2 * PI)  # Rotate around Y-axis
-			#_basis.y.y = randf() * 2 * PI
-
-
-			#var instance_transform = Transform3D(_basis, to_local(pos))
 			instance_transform.origin = to_local(pos)
 			instance_transform.basis = _basis
 			var data = {
@@ -166,12 +161,10 @@ func _generate():
 			}
 			if not ForestData.insert(pos, data):
 				denied_positions.append(pos)
-
 		_show_query_data(denied_positions)
 		if _show_octree_structure:
 			_view_octree_structure()
 		_update_aabb_preview()
-
 		emit_signal("generation_done")
 
 func update(_pos,_radius):
@@ -205,7 +198,7 @@ func _update_aabb_preview(force : bool = false):
 	if _show_aabb_preview or force:
 		if ForestData:
 			var box = BoxMesh.new()
-			box.size = ForestData.aabb.size
+			box.size = _size
 			var material = StandardMaterial3D.new()
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			material.albedo_color = _aabb_color
@@ -363,26 +356,43 @@ func _create_mm_instances(data : Array) -> Array:
 		instances.append(group)
 	return instances
 
-func rotated_aabb(aabb : AABB, _rotation_degrees):
+func rotated_aabb(aabb: AABB, _rotation : float):
 	var center = aabb.get_center()
 	var corners = []
-	var new_aabb = aabb
-	if _rotation_degrees == 0.0:
-		return new_aabb
 	for i in range(8):
 		corners.append(aabb.get_endpoint(i))
 
-	var s = sin(deg_to_rad(_rotation_degrees))
-	var c = cos(deg_to_rad(_rotation_degrees))
-
-	for corner in corners:
+	var s = sin(_rotation)
+	var c = cos(_rotation)
+	# Rotate corners
+	var rotated_corners = []
+	for i in range(8):
+		var corner = corners[i]
 		var x1 = corner.x - center.x
 		var z1 = corner.z - center.z
 
 		var x2 = x1 * c - z1 * s
-		var z2 = x1 * s - z1 * c
-		print(corner)
-		corner.x = x2 + corner.x
-		corner.z = z2 + corner.z
-		print(corner)
-	return new_aabb
+		var z2 = x1 * s + z1 * c  # Corrected calculation
+		rotated_corners.append(Vector3(x2 + center.x, corner.y, z2 + center.z))
+	# Calculate the bounds of the new AABB
+	var min_x = INF
+	var min_y = INF
+	var min_z = INF
+	var max_x = -INF
+	var max_y = -INF
+	var max_z = -INF
+	for corner in rotated_corners:
+		min_x = min(min_x, corner.x)
+		min_y = min(min_y, corner.y)
+		min_z = min(min_z, corner.z)
+		max_x = max(max_x, corner.x)
+		max_y = max(max_y, corner.y)
+		max_z = max(max_z, corner.z)
+
+	var _size = Vector3(max_x - min_x, max_y - min_y, max_z - min_z)
+	var _position = Vector3(min_x, min_y, min_z)
+	var naabb = AABB()
+	naabb.position = _position
+	naabb.size = _size
+	return naabb
+
