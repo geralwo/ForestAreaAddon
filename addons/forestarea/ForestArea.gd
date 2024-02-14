@@ -32,6 +32,7 @@ class_name ForestArea
 @export var lod_curve : Curve = load("res://addons/forestarea/base_curve.tres"):
 	set(v):
 		lod_curve = v
+@export var blend_distance : float = 5.0
 ## Shows the bounding box of the Forest
 @export var _show_aabb_preview : bool = true :
 	set(v):
@@ -306,7 +307,7 @@ func load_items_within_radius(_pos : Vector3,_radius : float = 100.0):
 						_instance_count += 1
 						_position.append(query[pos])
 				else:
-					if distance < lod_distances[lod_index] and not distance > lod_distances[lod_index] and distance > lod_distances[lod_index - 1]:
+					if distance < lod_distances[lod_index] and not distance > lod_distances[lod_index] and distance > lod_distances[lod_index - 1] - blend_distance:
 						_instance_count += 1
 						_position.append(query[pos])
 			_multi_mesh_instances[group_index][lod_index].multimesh.instance_count = _instance_count
